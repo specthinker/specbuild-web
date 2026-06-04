@@ -2,6 +2,17 @@ import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, ListChecks, M
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 
+const STRIPE = {
+  basicPriceId: 'price_1TehTJC3D2BSTN4AIooqzEsW',
+  proPriceId: 'price_1TehYjC3D2BSTN4AeO4ksKzW',
+  lifetimePriceId: 'price_1Tehb5C3D2BSTN4AHhCvNZ2b',
+  basicPaymentLink: 'https://buy.stripe.com/REPLACE_WITH_BASIC_LINK',
+  proPaymentLink: 'https://buy.stripe.com/REPLACE_WITH_PRO_LINK',
+  lifetimePaymentLink: 'https://buy.stripe.com/REPLACE_WITH_LIFETIME_LINK',
+  successUrl: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}#success` : '#success',
+  cancelUrl: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}#pricing` : '#pricing',
+} as const;
+
 type Format = 'markdown' | 'plain' | 'html';
 type Theme = 'dark' | 'light';
 
@@ -139,61 +150,11 @@ async function polishSpecLocally(spec: string): Promise<string> {
   });
 }
 
-// Payment Modal Component
+// Payment Modal Component (deprecated — moved to dedicated /pricing section)
 interface PaymentModalProps {
   onClose: () => void;
   onPurchase: (plan: string) => void;
 }
-
-const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onPurchase }) => {
-  const handleCheckout = (plan: string) => {
-    alert(`Initiating ${plan} checkout via Stripe... (Mock)`);
-    // In a real application, you would integrate with Stripe.js here
-    // For now, we'll simulate a successful purchase.
-    onPurchase(plan);
-  };
-
-  return (
-    <div className="payment-modal-overlay">
-      <div className="payment-modal">
-        <h2>Unlock unlimited spec generations</h2>
-        <p>Generate 2 specs for free. For unlimited access, choose a plan:</p>
-        <div className="payment-plans">
-          <div className="plan-card">
-            <h3>Basic</h3>
-            <p className="price">$5<small>/month</small></p>
-            <ul>
-              <li><Check size={16} aria-hidden="true" /><span>Unlimited specs</span></li>
-              <li><Check size={16} aria-hidden="true" /><span>Basic polishing</span></li>
-            </ul>
-            <button onClick={() => handleCheckout('Basic Monthly')}>Choose Basic</button>
-          </div>
-          <div className="plan-card featured">
-            <h3>Pro</h3>
-            <p className="price">$15<small>/month</small></p>
-            <ul>
-              <li><Check size={16} aria-hidden="true" /><span>Unlimited specs</span></li>
-              <li><Check size={16} aria-hidden="true" /><span>Advanced polishing</span></li>
-              <li><Check size={16} aria-hidden="true" /><span>Priority support</span></li>
-            </ul>
-            <button onClick={() => handleCheckout('Pro Monthly')}>Choose Pro</button>
-          </div>
-          <div className="plan-card">
-            <h3>Lifetime</h3>
-            <p className="price">$100<small>/one-time</small></p>
-            <ul>
-              <li><Check size={16} aria-hidden="true" /><span>Unlimited specs, forever</span></li>
-              <li><Check size={16} aria-hidden="true" /><span>Premium polishing</span></li>
-              <li><Check size={16} aria-hidden="true" /><span>All future updates</span></li>
-            </ul>
-            <button onClick={() => handleCheckout('Lifetime')}>Buy Lifetime</button>
-          </div>
-        </div>
-        <button className="ghost-button" onClick={onClose}>No thanks, I'll stick to free</button>
-      </div>
-    </div>
-  );
-};
 
 export function App() {
   const [values, setValues] = useState<SpecValues>(initialValues);
@@ -215,7 +176,6 @@ export function App() {
     const savedPremium = localStorage.getItem('is-premium-user');
     return savedPremium === 'true';
   });
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [cliSection, setCliSection] = useState<'install' | 'usage' | 'why'>('install');
 
   const missingRequired = useMemo(
@@ -250,14 +210,14 @@ export function App() {
     }
 
     if (!isPremiumUser && specGenerationCount >= 2) {
-      setShowPaymentModal(true);
+      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
     // Polish spec with local model mock
     const polished = await polishSpecLocally(generatedSpec);
     setLocalModelPolishedSpec(polished);
-    
+
     await navigator.clipboard.writeText(polished); // Copy polished spec
     setCopied(true);
 
@@ -272,12 +232,6 @@ export function App() {
     setCopied(false);
     setLocalModelPolishedSpec(null);
   }
-
-  const handlePurchaseSuccess = (plan: string) => {
-    setIsPremiumUser(true);
-    setShowPaymentModal(false);
-    alert(`Successfully purchased ${plan} plan! You are now a premium user.`);
-  };
 
   const cliMarkdownBySection: Record<typeof cliSection, string> = {
     install: `
@@ -340,6 +294,16 @@ python3 spec_cli.py gen --format text
             <h1 id="page-title">Create a complete software spec</h1>
           </div>
           <div className="topbar-actions">
+            <a
+              className="ghost-button"
+              href="#pricing"
+              onClick={(event) => {
+                event.preventDefault();
+                document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Pricing
+            </a>
             <button
               className="ghost-button"
               type="button"
@@ -594,6 +558,110 @@ python3 spec_cli.py gen --format text
         </div>
       </section>
 
+      {/* Pricing Section */}
+      <section className="section-wrapper" id="pricing">
+        <div className="pricing-section">
+          <div className="section-header">
+            <span className="section-eyebrow">Pricing</span>
+            <h2 className="section-title">Pick the plan that fits your workflow.</h2>
+            <p className="section-subtitle">
+              Start free with 2 spec generations. Upgrade when you need unlimited access, advanced
+              AI polishing, or lifetime updates.
+            </p>
+          </div>
+
+          <div className="pricing-grid">
+            <article className="pricing-card">
+              <header className="pricing-card-header">
+                <h3>Basic</h3>
+                <p className="pricing-card-tagline">For solo builders exploring the tool.</p>
+              </header>
+              <div className="pricing-card-price">
+                <span className="pricing-amount">$5</span>
+                <span className="pricing-period">/month</span>
+              </div>
+              <ul className="pricing-card-features">
+                <li><Check size={16} aria-hidden="true" /><span>Unlimited spec generations</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Basic AI polishing</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Markdown, HTML, and plain text export</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Cancel anytime</span></li>
+              </ul>
+              <a
+                className="pricing-card-button"
+                href={STRIPE.basicPaymentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Subscribe to Basic plan for $5 per month"
+              >
+                Choose Basic
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </article>
+
+            <article className="pricing-card featured">
+              <span className="pricing-card-badge">Most popular</span>
+              <header className="pricing-card-header">
+                <h3>Pro</h3>
+                <p className="pricing-card-tagline">For AI builders shipping every week.</p>
+              </header>
+              <div className="pricing-card-price">
+                <span className="pricing-amount">$15</span>
+                <span className="pricing-period">/month</span>
+              </div>
+              <ul className="pricing-card-features">
+                <li><Check size={16} aria-hidden="true" /><span>Everything in Basic</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Advanced AI polishing</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Priority email support</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Early access to new formats</span></li>
+              </ul>
+              <a
+                className="pricing-card-button primary"
+                href={STRIPE.proPaymentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Subscribe to Pro plan for $15 per month"
+              >
+                Choose Pro
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </article>
+
+            <article className="pricing-card">
+              <header className="pricing-card-header">
+                <h3>Lifetime</h3>
+                <p className="pricing-card-tagline">Pay once, own it forever.</p>
+              </header>
+              <div className="pricing-card-price">
+                <span className="pricing-amount">$100</span>
+                <span className="pricing-period">one-time</span>
+              </div>
+              <ul className="pricing-card-features">
+                <li><Check size={16} aria-hidden="true" /><span>Unlimited specs, forever</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Premium AI polishing</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>All future updates included</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>Priority support for life</span></li>
+              </ul>
+              <a
+                className="pricing-card-button"
+                href={STRIPE.lifetimePaymentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Buy Lifetime plan for $100 one-time"
+              >
+                Buy Lifetime
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </article>
+          </div>
+
+          <p className="pricing-footnote">
+            All plans include local AI polishing, the spec builder, and Markdown / HTML / plain text export.
+            Subscriptions are billed monthly. Lifetime is a one-time payment.
+            Need a team plan? <a href="mailto:hello@specbuild.dev">Contact us</a>.
+          </p>
+        </div>
+      </section>
+
       <footer className="site-footer">
         <div className="site-footer-content">
           <p>Spec Builder — turn fuzzy ideas into specs that AI agents actually understand.</p>
@@ -606,13 +674,6 @@ python3 spec_cli.py gen --format text
           <p>&copy; {new Date().getFullYear()} Spec Builder. Crafted for builders.</p>
         </div>
       </footer>
-
-      {showPaymentModal && (
-        <PaymentModal
-          onClose={() => setShowPaymentModal(false)}
-          onPurchase={handlePurchaseSuccess}
-        />
-      )}
     </main>
   );
 }
