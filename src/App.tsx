@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, ListChecks, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
+import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, ListChecks, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import * as api from './lib/api';
@@ -568,47 +568,117 @@ python3 spec_cli.py gen --format text
         </div>
       </section>
 
-      {/* AI Polish Section */}
+      {/* AI Polish Section — product explainer */}
       <section className="section-wrapper">
         <div className="local-model-section">
-          <div className="local-model-content">
-            <div className="local-model-text">
-              <span className="section-eyebrow">AI Polish</span>
-              <h2 className="section-title">Cleaner specs in one click.</h2>
+          <div className="explain-grid">
+            <div className="explain-text">
+              <span className="section-eyebrow">Specs are the new way to speak to your agent</span>
+              <h2 className="section-title">Stop re-prompting. Hand your agent a spec.</h2>
               <p>
-                After you fill out a spec, hit <strong>Polish with AI</strong> and a real language model
-                reformats your draft for clarity and structure. It preserves your intent, fixes
-                vague wording, and tightens scope.
+                Every back-and-forth with your AI agent burns tokens. Every "what do you mean by
+                that?" costs you a turn. Specs are the fix — a single, structured document that
+                says exactly what you want, in a format any agent can follow on the first try.
               </p>
               <p>
-                Calls run through a backend with smart model fallback, so you stay productive even
-                when one provider is busy. Your spec text is sent over HTTPS to the backend; we
-                don't log the content.
+                Use Spec Builder on the left to draft one. Copy the output, paste it into your
+                agent's prompt, and watch it ship the first time.
               </p>
-              <ul className="local-model-features">
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  <span>Real LLM (Deepseek / OpenRouter), not a string-replace mock.</span>
-                </li>
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  <span>Auto-fallback across providers so it rarely fails.</span>
-                </li>
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  <span>Counted against your monthly quota — no surprise overage.</span>
-                </li>
-              </ul>
+              <a
+                className="ghost-button explain-cta"
+                href="#pricing"
+                onClick={(event) => {
+                  event.preventDefault();
+                  document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                See pricing
+                <ArrowRight size={18} aria-hidden="true" />
+              </a>
             </div>
-            <div className="local-model-visual" aria-hidden="true">
-              <span className="polish-tag">Polished output</span>
-              <pre>
-{`## Goal / Outcome
-- Build a complete website that helps users
-  <span class="diff-old">create clear specs</span><span class="diff-new">produce structured, AI-ready specifications</span>.
-- Deliver a guided workflow that removes
-  <span class="diff-old">errors</span><span class="diff-new">ambiguity</span> from planning.`}
-              </pre>
+
+            <div className="explain-visual" aria-hidden="true">
+              <div className="spec-doc">
+                <div className="spec-doc-title">spec.md</div>
+                <div className="spec-line line-1"># Goal</div>
+                <div className="spec-line line-2">Build a todo app.</div>
+                <div className="spec-line line-3"># Scope</div>
+                <div className="spec-line line-4">Single user, web only.</div>
+                <div className="spec-line line-5"># Rules</div>
+                <div className="spec-line line-6">TypeScript + React.</div>
+              </div>
+              <div className="thinking-row">
+                <div className="lightbulb-wrap">
+                  <Lightbulb size={28} className="lightbulb" />
+                </div>
+                <div className="arrow-line" />
+                <div className="llm-pill">LLM</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Marketing Section */}
+      <section className="section-wrapper">
+        <div className="marketing-section">
+          <div className="marketing-content">
+            <div className="marketing-headline">
+              <span className="section-eyebrow">Built for harness engineers</span>
+              <h2 className="section-title">What language does your agent speak? Is it a spec?</h2>
+              <p>
+                Specs are the new way to talk to your agent. Stop wasting tokens asking it the same
+                clarifying questions over and over — give it a single, structured document and let
+                it get to work.
+              </p>
+            </div>
+
+            <div className="feature-grid">
+              <article className="feature-card">
+                <span className="feature-icon"><Target size={22} aria-hidden="true" /></span>
+                <h3>Define your vision</h3>
+                <p>Clearly articulate goals and outcomes without ambiguity. Guide your AI with precision and intent.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon"><GitBranch size={22} aria-hidden="true" /></span>
+                <h3>Structure for success</h3>
+                <p>Break complex tasks into manageable sections. Cover every critical detail before you ship.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon"><Sparkles size={22} aria-hidden="true" /></span>
+                <h3>AI-ready output</h3>
+                <p>Generate specs in formats optimized for direct input into large language models and agents.</p>
+              </article>
+            </div>
+
+            <div className="workflow-grid">
+              <div className="workflow-step">
+                <span className="workflow-step-num">1</span>
+                <h4>Answer guided prompts</h4>
+                <p>Walk through structured sections that capture every angle of your project.</p>
+              </div>
+              <div className="workflow-step">
+                <span className="workflow-step-num">2</span>
+                <h4>Export and ship</h4>
+                <p>Copy Markdown, HTML, or plain text straight into your repo or agent config.</p>
+              </div>
+            </div>
+
+            <div className="community-cta">
+              <h2 className="section-title">Prefer the terminal?</h2>
+              <p>
+                Spec Builder is also a command-line tool. Pipe it into scripts, run it in CI, or use
+                it anywhere you'd reach for a shell.
+              </p>
+              <a
+                className="call-to-action-button"
+                href="https://github.com/specthinker/specthinker-cli"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Use our CLI tool
+                <ArrowRight size={18} aria-hidden="true" />
+              </a>
             </div>
           </div>
         </div>
@@ -664,70 +734,6 @@ python3 spec_cli.py gen --format text
         </div>
       </section>
 
-      {/* Marketing Section */}
-      <section className="section-wrapper">
-        <div className="marketing-section">
-          <div className="marketing-content">
-            <div className="marketing-headline">
-              <span className="section-eyebrow">Built for AI builders</span>
-              <h2 className="section-title">Craft perfect AI agent specs, effortlessly.</h2>
-              <p>
-                Tired of ambiguous instructions and inconsistent outputs from your AI agents?
-                Spec Builder turns rough ideas into structured blueprints that any model can follow.
-              </p>
-            </div>
-
-            <div className="feature-grid">
-              <article className="feature-card">
-                <span className="feature-icon"><Target size={22} aria-hidden="true" /></span>
-                <h3>Define your vision</h3>
-                <p>Clearly articulate goals and outcomes without ambiguity. Guide your AI with precision and intent.</p>
-              </article>
-              <article className="feature-card">
-                <span className="feature-icon"><GitBranch size={22} aria-hidden="true" /></span>
-                <h3>Structure for success</h3>
-                <p>Break complex tasks into manageable sections. Cover every critical detail before you ship.</p>
-              </article>
-              <article className="feature-card">
-                <span className="feature-icon"><Sparkles size={22} aria-hidden="true" /></span>
-                <h3>AI-ready output</h3>
-                <p>Generate specs in formats optimized for direct input into large language models and agents.</p>
-              </article>
-            </div>
-
-            <div className="workflow-grid">
-              <div className="workflow-step">
-                <span className="workflow-step-num">1</span>
-                <h4>Answer guided prompts</h4>
-                <p>Walk through structured sections that capture every angle of your project.</p>
-              </div>
-              <div className="workflow-step">
-                <span className="workflow-step-num">2</span>
-                <h4>Polish with AI</h4>
-                <p>Sharpen wording and tighten scope with one click. Your text goes through a backend that auto-falls-back across providers.</p>
-              </div>
-              <div className="workflow-step">
-                <span className="workflow-step-num">3</span>
-                <h4>Export and ship</h4>
-                <p>Copy Markdown, HTML, or plain text straight into your repo or agent config.</p>
-              </div>
-            </div>
-
-            <div className="community-cta">
-              <h2 className="section-title">Join a growing community of AI innovators.</h2>
-              <p>
-                Whether you're a seasoned AI developer or just starting out, Spec Builder is your
-                essential companion for bringing agent ideas to life.
-              </p>
-              <button type="button" className="call-to-action-button">
-                Start building your perfect spec
-                <ArrowRight size={18} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Pricing Section */}
       <section className="section-wrapper" id="pricing">
         <div className="pricing-section">
@@ -769,7 +775,6 @@ python3 spec_cli.py gen --format text
             </article>
 
             <article className="pricing-card featured">
-              <span className="pricing-card-badge">Most popular</span>
               <header className="pricing-card-header">
                 <h3>Pro</h3>
                 <p className="pricing-card-tagline">For AI builders shipping every week.</p>
@@ -834,7 +839,7 @@ python3 spec_cli.py gen --format text
 
       <footer className="site-footer">
         <div className="site-footer-content">
-          <p>Spec Builder — turn fuzzy ideas into specs that AI agents actually understand.</p>
+          <p>Tired of double, triple, quadruple prompting for your AI to make something? Spec Builder gives you a clearly defined spec for your AI agents.</p>
           <div className="site-footer-links">
             <a href="#top">Back to top</a>
             <a href="#features">Features</a>

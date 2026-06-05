@@ -819,6 +819,215 @@ textarea[aria-invalid="true"] {
   font-weight: 600;
 }
 
+/* ----- AI Polish product explainer (specs are the new way...) ----- */
+.explain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+  padding: 32px 8px;
+}
+
+.explain-text {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.explain-text .section-title {
+  margin: 0;
+}
+
+.explain-text p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.explain-cta {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.explain-visual {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 20px 0;
+}
+
+.spec-doc {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--preview-bg);
+  box-shadow: 0 12px 32px var(--shadow-color);
+}
+
+.spec-doc-title {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-bottom: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spec-line {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--preview-text);
+  padding: 0 8px;
+  border-radius: 4px;
+  opacity: 0;
+  transform: translateX(-6px);
+  animation: specType 6s ease-in-out infinite;
+}
+
+.spec-line.line-1 { animation-delay: 0s; }
+.spec-line.line-2 { animation-delay: 0.35s; }
+.spec-line.line-3 { animation-delay: 0.85s; }
+.spec-line.line-4 { animation-delay: 1.2s; }
+.spec-line.line-5 { animation-delay: 1.7s; }
+.spec-line.line-6 { animation-delay: 2.05s; }
+
+.thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.lightbulb-wrap {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  flex-shrink: 0;
+}
+
+.lightbulb {
+  color: var(--muted);
+  filter: drop-shadow(0 0 0 transparent);
+  animation: bulbOn 6s ease-in-out infinite;
+  animation-delay: 2.6s;
+}
+
+.arrow-line {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--green) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  opacity: 0.35;
+  animation: arrowPulse 6s ease-in-out infinite;
+  animation-delay: 3.2s;
+}
+
+.llm-pill {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--panel-strong);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  flex-shrink: 0;
+  animation: llmGlow 6s ease-in-out infinite;
+  animation-delay: 3.8s;
+}
+
+@keyframes specType {
+  0% { opacity: 0; transform: translateX(-6px); }
+  8% { opacity: 1; transform: translateX(0); }
+  90% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-6px); }
+}
+
+@keyframes bulbOn {
+  0%, 100% {
+    color: var(--muted);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  12% {
+    color: var(--accent-text);
+    filter: drop-shadow(0 0 14px var(--accent));
+  }
+  70% {
+    color: var(--accent-text);
+    filter: drop-shadow(0 0 14px var(--accent));
+  }
+}
+
+@keyframes arrowPulse {
+  0%, 100% { opacity: 0.3; background-position: 100% 0; }
+  20% { opacity: 1; background-position: 0% 0; }
+  60% { opacity: 1; background-position: 0% 0; }
+}
+
+@keyframes llmGlow {
+  0%, 100% {
+    color: var(--muted);
+    background: var(--panel-strong);
+    border-color: var(--border);
+  }
+  20% {
+    color: var(--accent-text);
+    background: var(--green);
+    border-color: var(--green);
+  }
+  70% {
+    color: var(--accent-text);
+    background: var(--green);
+    border-color: var(--green);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spec-line,
+  .lightbulb,
+  .arrow-line,
+  .llm-pill {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    color: var(--text);
+  }
+  .llm-pill {
+    color: var(--accent-text);
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .lightbulb {
+    color: var(--accent-text);
+  }
+}
+
+@media (max-width: 900px) {
+  .explain-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+}
+
 /* ----- CLI section ----- */
 .cli-section {
   position: relative;
