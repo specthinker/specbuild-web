@@ -573,16 +573,16 @@ python3 spec_cli.py gen --format text
         <div className="local-model-section">
           <div className="explain-grid">
             <div className="explain-text">
-              <span className="section-eyebrow">Specs are the new way to speak to your agent</span>
+              <span className="section-eyebrow">specs instead of prompts for your agent</span>
               <h2 className="section-title">Stop re-prompting. Hand your agent a spec.</h2>
               <p>
                 Every back-and-forth with your AI agent burns tokens. Every "what do you mean by
-                that?" costs you a turn. Specs are the fix — a single, structured document that
+                that?" costs you a turn. Specs are the fix, a single, structured document that
                 says exactly what you want, in a format any agent can follow on the first try.
               </p>
               <p>
                 Use Spec Builder on the left to draft one. Copy the output, paste it into your
-                agent's prompt, and watch it ship the first time.
+                agent's prompt, and let it cook.
               </p>
               <a
                 className="ghost-button explain-cta"
@@ -627,9 +627,8 @@ python3 spec_cli.py gen --format text
               <span className="section-eyebrow">Built for harness engineers</span>
               <h2 className="section-title">What language does your agent speak? Is it a spec?</h2>
               <p>
-                Specs are the new way to talk to your agent. Stop wasting tokens asking it the same
-                clarifying questions over and over — give it a single, structured document and let
-                it get to work.
+                Do you double, triple, quadruple prompt just to get your agent what you want? Send
+                it a spec instead.
               </p>
             </div>
 

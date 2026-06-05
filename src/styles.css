@@ -1387,6 +1387,7 @@ textarea[aria-invalid="true"] {
   box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 30%, transparent);
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
   min-height: auto;
+  text-decoration: none;
 }
 
 .call-to-action-button:hover {
