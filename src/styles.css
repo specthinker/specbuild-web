@@ -273,6 +273,38 @@ textarea[aria-invalid="true"] {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+input.title-input,
+input[type="text"].title-input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: var(--field);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input.title-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font-weight: 400;
+}
+
+input.title-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 30%, transparent);
+}
+
+input.title-input[aria-invalid="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .error-text {
   color: var(--accent-strong);
   font-size: 0.9rem;

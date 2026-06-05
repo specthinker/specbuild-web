@@ -2,6 +2,7 @@ import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, Li
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import * as api from './lib/api';
+import type { Format, SectionKey, Sections } from './lib/api';
 
 const STRIPE = {
   basicPaymentLink: 'https://buy.stripe.com/8x2dR90rw3otcSp4aS6Zy00',
@@ -9,16 +10,8 @@ const STRIPE = {
   lifetimePaymentLink: 'https://buy.stripe.com/5kQfZh5LQ3ot5pX22K6Zy01',
 } as const;
 
-type Format = 'markdown' | 'plain' | 'html';
 type Theme = 'dark' | 'light';
 type Plan = 'free' | 'basic' | 'pro' | 'lifetime';
-
-const PLAN_LIMITS: Record<Plan, { specs: number; polish: number }> = {
-  free: { specs: 2, polish: 2 },
-  basic: { specs: 30, polish: 30 },
-  pro: { specs: 100, polish: 100 },
-  lifetime: { specs: Number.POSITIVE_INFINITY, polish: Number.POSITIVE_INFINITY },
-};
 
 const PLAN_LABELS: Record<Plan, string> = {
   free: 'Free',
@@ -27,72 +20,63 @@ const PLAN_LABELS: Record<Plan, string> = {
   lifetime: 'Lifetime',
 };
 
-const POLISH_SYSTEM_PROMPT = [
-  'You are a spec editor. Reformat the user spec for clarity, structure, and consistency.',
-  'Preserve all original content and intent. Do not add features, change scope, or invent requirements.',
-  'Use bullet points for lists. Use clear section headers. Keep the original language.',
-  'If a section is empty or unclear, leave it as-is. Output valid Markdown only.',
-].join(' ');
-
 type SpecSection = {
-  id: string;
+  id: SectionKey;
   title: string;
   required: boolean;
   placeholder: string;
   prompts: string[];
 };
 
-type SpecValues = Record<string, string>;
-
 const sections: SpecSection[] = [
   {
     id: 'goal',
-    title: 'Goal / outcome',
+    title: 'Goal',
     required: true,
-    placeholder: 'Build a complete website that helps users create structured specs.',
-    prompts: ['What should be accomplished?', 'What should the user-visible result be?'],
-  },
-  {
-    id: 'context',
-    title: 'Background / context',
-    required: false,
-    placeholder: 'Users need a guided way to write clear specs without starting from a blank page.',
-    prompts: ['Why is this needed?', 'What existing constraints matter?'],
-  },
-  {
-    id: 'requirements',
-    title: 'Requirements',
-    required: true,
-    placeholder: 'The app must validate required fields, support optional fields, and generate output in three formats.',
-    prompts: ['What must be true?', 'Which inputs, states, and edge cases matter?'],
+    placeholder: 'Build a website that helps users turn rough ideas into AI-ready specs.',
+    prompts: ['What are we building?', 'Why?', 'What is the smallest successful outcome?'],
   },
   {
     id: 'scope',
     title: 'Scope',
     required: true,
-    placeholder: 'Change React source, TypeScript components, styling, and formatter utilities. Do not change unrelated backend or auth files.',
-    prompts: ['What files or folders should change?', 'What should not change?'],
+    placeholder: 'In: change the React form, add a render endpoint call. Out: do not change the auth flow.',
+    prompts: ['What is included?', 'What is excluded?', 'What assumptions may be made?'],
   },
   {
-    id: 'acceptance',
-    title: 'Acceptance criteria',
+    id: 'files',
+    title: 'Files',
     required: true,
-    placeholder: 'The app loads without errors, validates required fields, and generates readable Markdown, plain text, and HTML.',
-    prompts: ['What should accepted look like?', 'What are the pass/fail checks?'],
+    placeholder: 'May change: src/App.tsx, src/lib/api.ts. Must not change: vite.config.ts. New: src/components/TitleInput.tsx.',
+    prompts: ['What files or directories may change?', 'What must not change?', 'What new files may be created?'],
   },
   {
-    id: 'implementation',
-    title: 'Implementation notes',
-    required: false,
-    placeholder: 'Use controlled React inputs, typed section data, and separate formatting logic from UI code.',
-    prompts: ['What approach should be used?', 'Which patterns or helpers should be reused?', 'What about testing?'],
+    id: 'rules',
+    title: 'Rules',
+    required: true,
+    placeholder: 'TypeScript only. Use the existing src/lib/api.ts client. Follow the styling tokens in src/styles.css.',
+    prompts: ['Languages to use?', 'Libraries or frameworks to use?', 'Existing patterns to follow?', 'Constraints that must not be violated?'],
   },
   {
-    id: 'testing',
-    title: 'Testing / validation',
+    id: 'acceptanceCriteria',
+    title: 'Acceptance Criteria',
+    required: true,
+    placeholder: 'Happy: form submits, preview renders, Copy button copies valid markdown. Error: backend 503 shows inline error.',
+    prompts: ['Happy path?', 'Error / failure path?', 'Edge cases?', 'Definition of done?'],
+  },
+  {
+    id: 'verification',
+    title: 'Verification',
     required: false,
-    placeholder: 'Run the TypeScript build, test desktop and mobile layouts, and verify every output format.',
-    prompts: ['What tests should be run?', 'What manual checks should pass?'],
+    placeholder: 'Run npm run build. Manually click Copy on three formats. Confirm preview matches form values.',
+    prompts: ['Tests to add or update?', 'Manual checks to perform?', 'Evidence required before completion?'],
+  },
+  {
+    id: 'output',
+    title: 'Output',
+    required: false,
+    placeholder: 'Deliver: working form, populated preview, copied spec. Summarize: any new files added. Flag: any open questions.',
+    prompts: ['What deliverables are expected?', 'What summary should be provided?', 'What remaining risks or open questions?'],
   },
 ];
 
@@ -102,14 +86,72 @@ const formatOptions: Array<{ id: Format; label: string; icon: typeof FileText }>
   { id: 'html', label: 'HTML', icon: Code2 },
 ];
 
-const initialValues = sections.reduce<SpecValues>((values, section) => {
-  values[section.id] = '';
-  return values;
-}, {});
+const initialValues: Sections = {
+  goal: '',
+  scope: '',
+  files: '',
+  rules: '',
+  acceptanceCriteria: '',
+  verification: '',
+  output: '',
+};
+
+const sectionNameToKey: Array<[RegExp, SectionKey]> = [
+  [/goal|outcome/i, 'goal'],
+  [/scope/i, 'scope'],
+  [/files?|directories?/i, 'files'],
+  [/rules?|constraints?/i, 'rules'],
+  [/acceptance|done/i, 'acceptanceCriteria'],
+  [/verif|test|evidence|manual/i, 'verification'],
+  [/output|deliver|summary|risk|open\s*questions?/i, 'output'],
+];
+
+function mapSectionNameToKey(name: string): SectionKey | null {
+  for (const [pattern, key] of sectionNameToKey) {
+    if (pattern.test(name)) return key;
+  }
+  return null;
+}
+
+interface ParsedPolished {
+  title: string;
+  sections: Partial<Sections>;
+}
+
+function parsePolishedContent(content: string): ParsedPolished {
+  const lines = content.split(/\r?\n/);
+  let title = '';
+  const sectionsMap: Partial<Sections> = {};
+  let currentKey: SectionKey | null = null;
+  let currentBody: string[] = [];
+
+  const flush = () => {
+    if (currentKey) {
+      sectionsMap[currentKey] = currentBody.join('\n').trim();
+    }
+  };
+
+  for (const line of lines) {
+    const h1 = line.match(/^#\s+(.+?)\s*$/);
+    const h2 = line.match(/^#{2,3}\s+(.+?)\s*$/);
+    if (h1 && !h2) {
+      title = h1[1].trim();
+    } else if (h2) {
+      flush();
+      currentKey = mapSectionNameToKey(h2[1].trim());
+      currentBody = [];
+    } else if (currentKey) {
+      currentBody.push(line);
+    }
+  }
+  flush();
+
+  return { title, sections: sectionsMap };
+}
 
 function splitLines(value: string) {
   return value
-    .split('\\n')
+    .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 }
@@ -123,13 +165,31 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;');
 }
 
-function getFilledSections(values: SpecValues) {
+function getFilledSections(values: Sections) {
   return sections
     .map((section) => ({ section, lines: splitLines(values[section.id] ?? '') }))
     .filter(({ lines }) => lines.length > 0);
 }
 
-function formatSpec(values: SpecValues, format: Format) {
+function formatLabel(format: Format): string {
+  if (format === 'markdown') return 'as Markdown';
+  if (format === 'html') return 'as HTML';
+  return 'as text';
+}
+
+function buildSectionsForBackend(values: Sections): Sections {
+  return {
+    goal: values.goal ?? '',
+    scope: values.scope ?? '',
+    files: values.files ?? '',
+    rules: values.rules ?? '',
+    acceptanceCriteria: values.acceptanceCriteria ?? '',
+    verification: values.verification ?? '',
+    output: values.output ?? '',
+  };
+}
+
+function formatSpecClientSide(values: Sections, format: Format): string {
   const filledSections = getFilledSections(values);
 
   if (filledSections.length === 0) {
@@ -138,28 +198,28 @@ function formatSpec(values: SpecValues, format: Format) {
 
   if (format === 'markdown') {
     return filledSections
-      .map(({ section, lines }) => `## ${section.title}\\n${lines.map((line) => `- ${line}`).join('\\n')}`)
-      .join('\\n\\n');
+      .map(({ section, lines }) => `## ${section.title}\n${lines.map((line) => `- ${line}`).join('\n')}`)
+      .join('\n\n');
   }
 
   if (format === 'html') {
     const body = filledSections
       .map(({ section, lines }) => {
-        const items = lines.map((line) => `    <li>${escapeHtml(line)}</li>`).join('\\n');
-        return `  <section>\\n    <h2>${escapeHtml(section.title)}</h2>\\n    <ul>\\n${items}\\n    </ul>\\n  </section>`;
+        const items = lines.map((line) => `    <li>${escapeHtml(line)}</li>`).join('\n');
+        return `  <section>\n    <h2>${escapeHtml(section.title)}</h2>\n    <ul>\n${items}\n    </ul>\n  </section>`;
       })
-      .join('\\n');
+      .join('\n');
 
-    return `<article class=\"spec\">\\n${body}\\n</article>`;
+    return `<article class="spec">\n${body}\n</article>`;
   }
 
   return filledSections
-    .map(({ section, lines }) => `${section.title}\\n${lines.map((line) => `- ${line}`).join('\\n')}`)
-    .join('\\n\\n');
+    .map(({ section, lines }) => `${section.title}\n${lines.map((line) => `- ${line}`).join('\n')}`)
+    .join('\n\n');
 }
 
 export function App() {
-  const [values, setValues] = useState<SpecValues>(initialValues);
+  const [values, setValues] = useState<Sections>(initialValues);
   const [format, setFormat] = useState<Format>('markdown');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -168,6 +228,7 @@ export function App() {
     return savedTheme === 'light' ? 'light' : 'dark';
   });
 
+  const [title, setTitle] = useState<string>('Untitled spec');
   const [plan, setPlan] = useState<Plan>(() => {
     const saved = localStorage.getItem('specthinker-plan');
     return saved === 'basic' || saved === 'pro' || saved === 'lifetime' ? saved : 'free';
@@ -177,22 +238,29 @@ export function App() {
   const [polishError, setPolishError] = useState<string | null>(null);
   const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
-  const [specsUsed, setSpecsUsed] = useState<number>(0);
+  const [quota, setQuota] = useState<api.QuotaState | null>(null);
+  const [quotaExhausted, setQuotaExhausted] = useState(false);
+  const [lastProvider, setLastProvider] = useState<string | null>(null);
   const [backendReady, setBackendReady] = useState<boolean>(api.isConfigured());
   const [cliSection, setCliSection] = useState<'install' | 'usage' | 'why'>('install');
+  const [clientId] = useState<string>(() => api.getOrCreateClientId());
 
   const isPremium = plan !== 'free';
-  const limits = PLAN_LIMITS[plan];
-  const specsRemaining = Math.max(0, limits.specs - specsUsed);
-  const limitReached = !Number.isFinite(limits.specs) ? false : specsUsed >= limits.specs;
   const apiConfigured = api.isConfigured();
-
   const missingRequired = useMemo(
-    () => sections.filter((section) => section.required && !values[section.id].trim()).map((section) => section.id),
+    () =>
+      sections
+        .filter((section) => section.required && !values[section.id].trim())
+        .map((section) => section.id),
     [values],
   );
-  const generatedSpec = useMemo(() => formatSpec(values, format), [values, format]);
-  const canGenerate = missingRequired.length === 0;
+  const canGenerate = useMemo(
+    () =>
+      sections.every((section) => !section.required || values[section.id].trim().length > 0) &&
+      title.trim().length > 0,
+    [values, title],
+  );
+  const generatedSpec = useMemo(() => formatSpecClientSide(values, format), [values, format]);
 
   useEffect(() => {
     localStorage.setItem('specthinker-theme', theme);
@@ -207,28 +275,26 @@ export function App() {
     let cancelled = false;
     (async () => {
       try {
-        const info = await api.fetchSession();
+        await api.getHealth();
         if (cancelled) return;
         setBackendReady(true);
-        if (info.plan !== plan) setPlan(info.plan);
-        setSpecsUsed(info.used.specs);
-      } catch {
         try {
-          const info = await api.bootstrapSession();
-          if (cancelled) return;
-          setBackendReady(true);
-          if (info.plan !== plan) setPlan(info.plan);
-          setSpecsUsed(info.used.specs);
+          const q = await api.getQuota(clientId);
+          if (!cancelled) {
+            setQuota(q);
+            setQuotaExhausted(q.used >= q.limit);
+          }
         } catch {
-          if (!cancelled) setBackendReady(false);
+          // quota fetch is best-effort
         }
+      } catch {
+        if (!cancelled) setBackendReady(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [apiConfigured, clientId]);
 
   useEffect(() => {
     if (window.location.hash !== '#success') return;
@@ -239,7 +305,6 @@ export function App() {
         ? planFromUrl
         : 'pro';
     setPlan(nextPlan);
-    setSpecsUsed(0);
     setShowWelcomeBanner(true);
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
     setTimeout(() => {
@@ -249,8 +314,15 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  function updateValue(id: string, value: string) {
+  function updateValue(id: SectionKey, value: string) {
     setValues((current) => ({ ...current, [id]: value }));
+    setCopied(false);
+    setPolishedSpec(null);
+    setPolishError(null);
+  }
+
+  function updateTitle(value: string) {
+    setTitle(value);
     setCopied(false);
     setPolishedSpec(null);
     setPolishError(null);
@@ -258,58 +330,63 @@ export function App() {
 
   async function copySpec() {
     setAttemptedSubmit(true);
-    if (!canGenerate || !generatedSpec) return;
-    if (limitReached) {
-      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!canGenerate) return;
+    if (quotaExhausted) {
+      setQuotaMessage('Daily polish quota reached. Resets at midnight UTC.');
       return;
     }
-    if (apiConfigured && backendReady) {
-      setQuotaMessage(null);
-    }
-    await navigator.clipboard.writeText(generatedSpec);
-    setCopied(true);
-    if (apiConfigured) {
-      try {
-        const info = await api.bootstrapSession();
-        setSpecsUsed(info.used.specs);
-      } catch {
-        // ignore — backend may be down; copy still worked
+    setPolishError(null);
+    setQuotaMessage(null);
+    try {
+      const text = apiConfigured
+        ? await api.renderUnsavedSpec({ title: title.trim(), sections: buildSectionsForBackend(values) }, format)
+        : formatSpecClientSide(values, format);
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch (err) {
+      if (err instanceof api.NotConfiguredError) {
+        setPolishError('Backend not configured.');
+      } else {
+        setPolishError(err instanceof Error ? err.message : 'Copy failed.');
       }
-    } else {
-      setSpecsUsed((c) => c + 1);
     }
   }
 
   async function polishWithAi() {
-    setAttemptedSubmit(true);
-    if (!canGenerate || !generatedSpec) return;
-    if (limitReached) {
-      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!canGenerate) return;
+    if (!apiConfigured || !backendReady) return;
+    if (quotaExhausted) {
+      setQuotaMessage('Daily polish quota reached. Resets at midnight UTC.');
       return;
     }
-    if (!apiConfigured) return;
     setIsPolishing(true);
     setPolishError(null);
     setQuotaMessage(null);
     try {
-      const { polished } = await api.polishSpec(generatedSpec);
-      setPolishedSpec(polished);
-      try {
-        const info = await api.fetchSession();
-        setSpecsUsed(info.used.specs);
-      } catch {
-        // ignore
-      }
+      const res = await api.polishSpec({
+        title: title.trim(),
+        sections: buildSectionsForBackend(values),
+        clientId,
+      });
+      setLastProvider(res.provider);
+      const parsed = parsePolishedContent(res.content);
+      if (parsed.title) setTitle(parsed.title);
+      if (parsed.sections.goal !== undefined) setValues((current) => ({ ...current, ...parsed.sections }));
+      setPolishedSpec(res.content);
+      setQuota(res.quota);
+      setQuotaExhausted(res.quota.used >= res.quota.limit);
     } catch (err) {
       if (err instanceof api.QuotaExceededError) {
         setQuotaMessage(err.message);
-        setSpecsUsed(limits.specs);
+        setQuotaExhausted(true);
+        if (err.limit > 0) setQuota({ used: err.used, limit: err.limit, resetsAtEpochMillis: err.resetsAtEpochMillis });
       } else if (err instanceof api.LlmUnavailableError) {
-        setPolishError(err.message);
+        const tried = err.providers.length > 0 ? ` Tried: ${err.providers.map((p) => p.split(':')[0]).join(', ')}.` : '';
+        setPolishError(`AI polish is temporarily down.${tried}`);
       } else if (err instanceof api.NotConfiguredError) {
         setPolishError('AI polish is not configured yet.');
       } else {
-        setPolishError('AI polish failed. Your spec was not modified.');
+        setPolishError(err instanceof Error ? err.message : 'AI polish failed. Your spec was not modified.');
       }
     } finally {
       setIsPolishing(false);
@@ -323,13 +400,13 @@ export function App() {
       )
     ) {
       setValues(initialValues);
+      setTitle('Untitled spec');
       setAttemptedSubmit(false);
       setCopied(false);
       setPolishedSpec(null);
       setPolishError(null);
       setQuotaMessage(null);
       setPlan('free');
-      setSpecsUsed(0);
     }
   }
 
@@ -390,10 +467,7 @@ python3 spec_cli.py gen --format text
       {showWelcomeBanner && (
         <div className="premium-banner" role="status">
           <Sparkles size={18} aria-hidden="true" />
-          <span>
-            Welcome to {PLAN_LABELS[plan]}!{' '}
-            {plan === 'lifetime' ? 'Unlimited specs unlocked.' : `${limits.specs} specs / month unlocked.`}
-          </span>
+          <span>Welcome to {PLAN_LABELS[plan]}!</span>
           <button
             type="button"
             className="premium-banner-close"
@@ -441,6 +515,22 @@ python3 spec_cli.py gen --format text
 
         <div className="builder-grid">
           <form className="spec-form" onSubmit={(event) => event.preventDefault()}>
+            <label className="field-group title-field">
+              <span className="field-heading">
+                <span>Spec title</span>
+                <span className="badge required">Required</span>
+              </span>
+              <span className="field-prompts">A short, descriptive name for this spec.</span>
+              <input
+                type="text"
+                className="title-input"
+                value={title}
+                onChange={(event) => updateTitle(event.target.value)}
+                placeholder="My Spec"
+                aria-invalid={attemptedSubmit && !title.trim()}
+              />
+            </label>
+
             {sections.map((section) => {
               const hasError = attemptedSubmit && missingRequired.includes(section.id);
 
@@ -478,7 +568,7 @@ python3 spec_cli.py gen --format text
               </div>
               <div className="status-pill">
                 <Check size={16} aria-hidden="true" />
-                {canGenerate ? 'Ready' : `${missingRequired.length} missing`}
+                {canGenerate ? 'Ready' : `${missingRequired.length + (title.trim() ? 0 : 1)} missing`}
               </div>
             </div>
 
@@ -502,11 +592,11 @@ python3 spec_cli.py gen --format text
             </div>
 
             <div className="preview-wrapper">
-              {polishedSpec && <span className="preview-badge">Polished</span>}
+              {polishedSpec && <span className="preview-badge">Polished{lastProvider ? ` · ${lastProvider}` : ''}</span>}
               <pre className="preview" aria-live="polite">
                 {canGenerate && generatedSpec
                   ? (polishedSpec || generatedSpec)
-                  : 'Fill in the required sections to generate a spec preview.'}
+                  : 'Fill in the title and required sections to generate a spec preview.'}
               </pre>
             </div>
 
@@ -515,16 +605,16 @@ python3 spec_cli.py gen --format text
                 className="primary-button"
                 type="button"
                 onClick={copySpec}
-                disabled={!canGenerate || limitReached}
+                disabled={!canGenerate}
               >
                 <Clipboard size={18} aria-hidden="true" />
-                {copied ? 'Copied' : isPremium ? 'Copy polished spec' : 'Copy spec'}
+                {copied ? 'Copied' : `Copy ${formatLabel(format)}`}
               </button>
               <button
                 className="secondary-button"
                 type="button"
                 onClick={polishWithAi}
-                disabled={!canGenerate || limitReached || isPolishing || !apiConfigured}
+                disabled={!canGenerate || isPolishing || !apiConfigured || !backendReady || quotaExhausted}
               >
                 <Wand2 size={18} aria-hidden="true" />
                 {isPolishing ? 'Polishing…' : polishedSpec ? 'Re-polish' : 'Polish with AI'}
@@ -546,22 +636,10 @@ python3 spec_cli.py gen --format text
             {polishError && <p className="error-banner">{polishError}</p>}
             {quotaMessage && <p className="quota-banner">{quotaMessage}</p>}
 
-            {plan === 'free' && !quotaMessage && (
+            {apiConfigured && backendReady && quota && (
               <p className="free-generations-text">
-                {specsRemaining} of {limits.specs} free specs remaining.
-              </p>
-            )}
-            {plan === 'free' && quotaMessage && (
-              <p className="free-generations-text">
-                <a href="#pricing" onClick={(e) => { e.preventDefault(); document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }); }}>
-                  Upgrade to keep generating
-                </a>
-                .
-              </p>
-            )}
-            {plan !== 'free' && (
-              <p className="free-generations-text">
-                {Number.isFinite(limits.specs) ? `${specsRemaining} of ${limits.specs} specs remaining this month.` : 'Unlimited specs.'}
+                {quota.used} of {quota.limit} polishes used today
+                {lastProvider ? ` · last call: ${lastProvider}` : ''}.
               </p>
             )}
           </aside>

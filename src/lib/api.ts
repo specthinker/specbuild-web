@@ -1,19 +1,19 @@
 /**
- * Thin client for the SpecBuild backend.
+ * Thin client for the SpecBuild backend (Kotlin/Spring Boot).
  *
- * The backend is a Kotlin/Spring Boot service that:
- *   - Holds the LLM API keys server-side (never exposed to browsers)
- *   - Enforces per-user quotas atomically
- *   - Calls Deepseek / OpenRouter with a silent fallback chain
+ * Source of truth: FRONTEND_INTEGRATION.md in the repo root.
  *
- * Set VITE_API_URL in your .env to point at the deployed backend
- * (e.g. https://specbuild-backend.onrender.com).
+ * Base URL is read from VITE_API_URL. All endpoints live under /api/v1.
+ * Auth: none. CORS: open.
  *
  * If VITE_API_URL is missing, all calls throw NotConfiguredError so the
  * frontend can show a friendly empty state.
  */
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '');
+const API_BASE = API_URL ? `${API_URL}/api/v1` : '';
+
+const CLIENT_ID_KEY = 'specbuild-client-id';
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -23,43 +23,121 @@ export class NotConfiguredError extends Error {
 }
 
 export class QuotaExceededError extends Error {
-  readonly resetAt: string | null;
-  readonly message: string;
-  constructor(message: string, resetAt: string | null) {
+  readonly used: number;
+  readonly limit: number;
+  readonly resetsAtEpochMillis: number;
+  readonly retryAfterSeconds: number;
+  constructor(message: string, used: number, limit: number, resetsAtEpochMillis: number, retryAfterSeconds: number) {
     super(message);
     this.name = 'QuotaExceededError';
-    this.message = message;
-    this.resetAt = resetAt;
+    this.used = used;
+    this.limit = limit;
+    this.resetsAtEpochMillis = resetsAtEpochMillis;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
 export class LlmUnavailableError extends Error {
-  constructor(message: string) {
+  readonly providers: string[];
+  constructor(message: string, providers: string[]) {
     super(message);
     this.name = 'LlmUnavailableError';
+    this.providers = providers;
   }
 }
 
-export class SessionExpiredError extends Error {
-  constructor() {
-    super('Session expired.');
-    this.name = 'SessionExpiredError';
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotFoundError';
   }
 }
 
-export type Plan = 'free' | 'basic' | 'pro' | 'lifetime';
+export class VersionMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VersionMismatchError';
+  }
+}
 
-export interface SessionInfo {
-  userId: string;
-  plan: Plan;
-  limits: { specsPerMonth: number; polishPerMonth: number };
-  used: { specs: number; polish: number };
-  periodStart: string;
+export class BackendError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = 'BackendError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export type SectionKey =
+  | 'goal'
+  | 'scope'
+  | 'files'
+  | 'rules'
+  | 'acceptanceCriteria'
+  | 'verification'
+  | 'output';
+
+export type Sections = Record<SectionKey, string>;
+
+export type Format = 'markdown' | 'plain' | 'html';
+
+export interface Spec {
+  id: string;
+  title: string;
+  sections: Sections;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface SpecSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateSpecRequest {
+  title: string;
+  sections: Sections;
+}
+
+export interface UpdateSpecRequest {
+  title: string;
+  sections: Sections;
+  version: number;
+}
+
+export interface PolishRequest {
+  title: string;
+  sections: Sections;
+  clientId: string;
 }
 
 export interface PolishResponse {
-  polished: string;
-  providerUsed: string;
+  content: string;
+  provider: string;
+  quota: {
+    used: number;
+    limit: number;
+    resetsAtEpochMillis: number;
+  };
+}
+
+export interface QuotaState {
+  used: number;
+  limit: number;
+  resetsAtEpochMillis: number;
+}
+
+interface ErrorBody {
+  error?: string;
+  message?: string;
+  details?: Record<string, unknown> | null;
 }
 
 function ensureConfigured() {
@@ -68,60 +146,149 @@ function ensureConfigured() {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export function isConfigured(): boolean {
+  return Boolean(API_URL);
+}
+
+export function getOrCreateClientId(): string {
+  if (typeof window === 'undefined') return 'anonymous';
+  let id = window.localStorage.getItem(CLIENT_ID_KEY);
+  if (!id) {
+    id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `cid-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(CLIENT_ID_KEY, id);
+  }
+  return id;
+}
+
+async function readErrorBody(res: Response): Promise<ErrorBody> {
+  try {
+    return (await res.json()) as ErrorBody;
+  } catch {
+    return {};
+  }
+}
+
+function throwForResponse(res: Response, body: ErrorBody): never {
+  const code = body.error ?? `http_${res.status}`;
+  const message = body.message ?? `Request failed (${res.status}).`;
+
+  if (res.status === 429 && code === 'quota_exceeded') {
+    const used = Number((body.details as { used?: number } | null)?.used ?? 0);
+    const limit = Number((body.details as { limit?: number } | null)?.limit ?? 0);
+    const resetsAtEpochMillis = Number(res.headers.get('Resets-At') ?? 0);
+    const retryAfterSeconds = Number(res.headers.get('Retry-After') ?? 0);
+    throw new QuotaExceededError(message, used, limit, resetsAtEpochMillis, retryAfterSeconds);
+  }
+
+  if (res.status === 503 && code === 'polish_unavailable') {
+    const providers = ((body.details as { providers?: string[] } | null)?.providers ?? []) as string[];
+    throw new LlmUnavailableError(message, providers);
+  }
+
+  if (res.status === 404) {
+    throw new NotFoundError(message);
+  }
+
+  if (res.status === 409) {
+    throw new VersionMismatchError(message);
+  }
+
+  throw new BackendError(message, res.status, code);
+}
+
+async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   ensureConfigured();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(init.headers ?? {}),
     },
   });
-
-  if (res.status === 401) {
-    throw new SessionExpiredError();
-  }
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (res.status === 429) {
-    throw new QuotaExceededError(
-      typeof data.message === 'string' ? data.message : 'Quota exceeded.',
-      typeof data.resetAt === 'string' ? data.resetAt : null,
-    );
-  }
-
-  if (res.status === 503) {
-    throw new LlmUnavailableError(
-      typeof data.message === 'string' ? data.message : 'AI service unavailable.',
-    );
-  }
-
   if (!res.ok) {
-    throw new Error(
-      typeof data.message === 'string' ? data.message : `Request failed (${res.status}).`,
-    );
+    const body = await readErrorBody(res);
+    throwForResponse(res, body);
   }
-
-  return data as T;
+  return (await res.json()) as T;
 }
 
-export async function bootstrapSession(): Promise<SessionInfo> {
-  return request<SessionInfo>('/session', { method: 'POST' });
+async function textRequest(path: string, init: RequestInit = {}): Promise<string> {
+  ensureConfigured();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await readErrorBody(res);
+    throwForResponse(res, body);
+  }
+  return res.text();
 }
 
-export async function fetchSession(): Promise<SessionInfo> {
-  return request<SessionInfo>('/session', { method: 'GET' });
+function formatPath(format: Format): string {
+  if (format === 'plain') return 'text';
+  return format;
 }
 
-export async function polishSpec(spec: string): Promise<PolishResponse> {
-  return request<PolishResponse>('/polish', {
-    method: 'POST',
-    body: JSON.stringify({ spec }),
+/* ----- Health ----- */
+export async function getHealth(): Promise<{ status: 'UP' | 'DOWN' }> {
+  ensureConfigured();
+  const res = await fetch(`${API_URL}/actuator/health`);
+  if (!res.ok) throw new BackendError(`Backend unhealthy (${res.status}).`, res.status, 'unhealthy');
+  return (await res.json()) as { status: 'UP' | 'DOWN' };
+}
+
+/* ----- Specs CRUD ----- */
+export function listSpecs(): Promise<SpecSummary[]> {
+  return jsonRequest<SpecSummary[]>('/specs');
+}
+
+export function createSpec(req: CreateSpecRequest): Promise<Spec> {
+  return jsonRequest<Spec>('/specs', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export function getSpec(id: string): Promise<Spec> {
+  return jsonRequest<Spec>(`/specs/${encodeURIComponent(id)}`);
+}
+
+export function updateSpec(id: string, req: UpdateSpecRequest): Promise<Spec> {
+  return jsonRequest<Spec>(`/specs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(req),
   });
 }
 
-export function isConfigured(): boolean {
-  return Boolean(API_URL);
+export function deleteSpec(id: string): Promise<void> {
+  ensureConfigured();
+  return fetch(`${API_BASE}/specs/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((res) => {
+    if (!res.ok) {
+      return readErrorBody(res).then((body) => throwForResponse(res, body));
+    }
+  });
+}
+
+/* ----- Render ----- */
+export function renderUnsavedSpec(req: CreateSpecRequest, format: Format): Promise<string> {
+  return textRequest(`/specs/render?format=${formatPath(format)}`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export function renderSavedSpec(id: string, format: Format): Promise<string> {
+  return textRequest(`/specs/${encodeURIComponent(id)}/render?format=${formatPath(format)}`);
+}
+
+/* ----- LLM polish + quota ----- */
+export function polishSpec(req: PolishRequest): Promise<PolishResponse> {
+  return jsonRequest<PolishResponse>('/llm/polish', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export function getQuota(clientId: string): Promise<QuotaState> {
+  return jsonRequest<QuotaState>('/llm/quota', { method: 'POST', body: JSON.stringify({ clientId }) });
 }
