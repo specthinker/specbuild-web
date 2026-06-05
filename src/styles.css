@@ -1505,7 +1505,8 @@ input.title-input[aria-invalid="true"] {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: minmax(0, 440px);
+  justify-content: center;
   gap: 24px;
   margin-bottom: 40px;
   align-items: stretch;

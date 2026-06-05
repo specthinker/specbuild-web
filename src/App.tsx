@@ -6,18 +6,14 @@ import type { Format, SectionKey, Sections } from './lib/api';
 
 const STRIPE = {
   basicPaymentLink: 'https://buy.stripe.com/8x2dR90rw3otcSp4aS6Zy00',
-  proPaymentLink: 'https://buy.stripe.com/dRm9AT3DI9MR9GddLs6Zy02',
-  lifetimePaymentLink: 'https://buy.stripe.com/5kQfZh5LQ3ot5pX22K6Zy01',
 } as const;
 
 type Theme = 'dark' | 'light';
-type Plan = 'free' | 'basic' | 'pro' | 'lifetime';
+type Plan = 'free' | 'basic';
 
 const PLAN_LABELS: Record<Plan, string> = {
   free: 'Free',
   basic: 'Basic',
-  pro: 'Pro',
-  lifetime: 'Lifetime',
 };
 
 type SpecSection = {
@@ -231,7 +227,7 @@ export function App() {
   const [title, setTitle] = useState<string>('Untitled spec');
   const [plan, setPlan] = useState<Plan>(() => {
     const saved = localStorage.getItem('specthinker-plan');
-    return saved === 'basic' || saved === 'pro' || saved === 'lifetime' ? saved : 'free';
+    return saved === 'basic' ? 'basic' : 'free';
   });
   const [polishedSpec, setPolishedSpec] = useState<string | null>(null);
   const [isPolishing, setIsPolishing] = useState(false);
@@ -300,11 +296,7 @@ export function App() {
     if (window.location.hash !== '#success') return;
     const params = new URLSearchParams(window.location.search);
     const planFromUrl = params.get('plan');
-    const nextPlan: Plan =
-      planFromUrl === 'basic' || planFromUrl === 'pro' || planFromUrl === 'lifetime'
-        ? planFromUrl
-        : 'pro';
-    setPlan(nextPlan);
+    setPlan(planFromUrl === 'basic' ? 'basic' : 'free');
     setShowWelcomeBanner(true);
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
     setTimeout(() => {
@@ -816,18 +808,17 @@ python3 spec_cli.py gen --format text
         <div className="pricing-section">
           <div className="section-header">
             <span className="section-eyebrow">Pricing</span>
-            <h2 className="section-title">Pick the plan that fits your workflow.</h2>
+            <h2 className="section-title">One simple plan. Cancel anytime.</h2>
             <p className="section-subtitle">
-              Start free with 2 spec generations. Upgrade when you need unlimited access, advanced
-              AI polishing, or lifetime updates.
+              Try Spec Builder free. Upgrade to Basic for AI Polish and unlimited exports.
             </p>
           </div>
 
           <div className="pricing-grid">
-            <article className="pricing-card">
+            <article className="pricing-card featured">
               <header className="pricing-card-header">
                 <h3>Basic</h3>
-                <p className="pricing-card-tagline">For solo builders exploring the tool.</p>
+                <p className="pricing-card-tagline">For solo builders shipping with AI agents.</p>
               </header>
               <div className="pricing-card-price">
                 <span className="pricing-amount">$5</span>
@@ -835,12 +826,12 @@ python3 spec_cli.py gen --format text
               </div>
               <ul className="pricing-card-features">
                 <li><Check size={16} aria-hidden="true" /><span>Unlimited spec generations</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Basic AI polishing</span></li>
+                <li><Check size={16} aria-hidden="true" /><span>AI Polish with Deepseek / OpenRouter fallback</span></li>
                 <li><Check size={16} aria-hidden="true" /><span>Markdown, HTML, and plain text export</span></li>
                 <li><Check size={16} aria-hidden="true" /><span>Cancel anytime</span></li>
               </ul>
               <a
-                className="pricing-card-button"
+                className="pricing-card-button primary"
                 href={STRIPE.basicPaymentLink}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -850,66 +841,10 @@ python3 spec_cli.py gen --format text
                 <ArrowRight size={16} aria-hidden="true" />
               </a>
             </article>
-
-            <article className="pricing-card featured">
-              <header className="pricing-card-header">
-                <h3>Pro</h3>
-                <p className="pricing-card-tagline">For AI builders shipping every week.</p>
-              </header>
-              <div className="pricing-card-price">
-                <span className="pricing-amount">$15</span>
-                <span className="pricing-period">/month</span>
-              </div>
-              <ul className="pricing-card-features">
-                <li><Check size={16} aria-hidden="true" /><span>Everything in Basic</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Advanced AI polishing</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Priority email support</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Early access to new formats</span></li>
-              </ul>
-              <a
-                className="pricing-card-button primary"
-                href={STRIPE.proPaymentLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Subscribe to Pro plan for $15 per month"
-              >
-                Choose Pro
-                <ArrowRight size={16} aria-hidden="true" />
-              </a>
-            </article>
-
-            <article className="pricing-card">
-              <header className="pricing-card-header">
-                <h3>Lifetime</h3>
-                <p className="pricing-card-tagline">Pay once, own it forever.</p>
-              </header>
-              <div className="pricing-card-price">
-                <span className="pricing-amount">$100</span>
-                <span className="pricing-period">one-time</span>
-              </div>
-              <ul className="pricing-card-features">
-                <li><Check size={16} aria-hidden="true" /><span>Unlimited specs, forever</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Premium AI polishing</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>All future updates included</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>Priority support for life</span></li>
-              </ul>
-              <a
-                className="pricing-card-button"
-                href={STRIPE.lifetimePaymentLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Buy Lifetime plan for $100 one-time"
-              >
-                Buy Lifetime
-                <ArrowRight size={16} aria-hidden="true" />
-              </a>
-            </article>
           </div>
 
           <p className="pricing-footnote">
-            All plans include AI Polish, the spec builder, and Markdown / HTML / plain text export.
-            Subscriptions are billed monthly. Lifetime is a one-time payment.
-            Need a team plan? <a href="mailto:hello@specbuild.dev">Contact us</a>.
+            Billed monthly. Cancel anytime. Need a team plan? <a href="mailto:hello@specbuild.dev">Contact us</a>.
           </p>
         </div>
       </section>
