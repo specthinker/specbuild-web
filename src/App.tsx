@@ -1,20 +1,38 @@
-import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, ListChecks, Moon, RefreshCcw, Sparkles, Sun, Target } from 'lucide-react';
+import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, ListChecks, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
+import * as api from './lib/api';
 
 const STRIPE = {
-  basicPriceId: 'price_1TehTJC3D2BSTN4AIooqzEsW',
-  proPriceId: 'price_1TehYjC3D2BSTN4AeO4ksKzW',
-  lifetimePriceId: 'price_1Tehb5C3D2BSTN4AHhCvNZ2b',
-  basicPaymentLink: 'https://buy.stripe.com/REPLACE_WITH_BASIC_LINK',
-  proPaymentLink: 'https://buy.stripe.com/REPLACE_WITH_PRO_LINK',
-  lifetimePaymentLink: 'https://buy.stripe.com/REPLACE_WITH_LIFETIME_LINK',
-  successUrl: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}#success` : '#success',
-  cancelUrl: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}#pricing` : '#pricing',
+  basicPaymentLink: 'https://buy.stripe.com/8x2dR90rw3otcSp4aS6Zy00',
+  proPaymentLink: 'https://buy.stripe.com/dRm9AT3DI9MR9GddLs6Zy02',
+  lifetimePaymentLink: 'https://buy.stripe.com/5kQfZh5LQ3ot5pX22K6Zy01',
 } as const;
 
 type Format = 'markdown' | 'plain' | 'html';
 type Theme = 'dark' | 'light';
+type Plan = 'free' | 'basic' | 'pro' | 'lifetime';
+
+const PLAN_LIMITS: Record<Plan, { specs: number; polish: number }> = {
+  free: { specs: 2, polish: 2 },
+  basic: { specs: 30, polish: 30 },
+  pro: { specs: 100, polish: 100 },
+  lifetime: { specs: Number.POSITIVE_INFINITY, polish: Number.POSITIVE_INFINITY },
+};
+
+const PLAN_LABELS: Record<Plan, string> = {
+  free: 'Free',
+  basic: 'Basic',
+  pro: 'Pro',
+  lifetime: 'Lifetime',
+};
+
+const POLISH_SYSTEM_PROMPT = [
+  'You are a spec editor. Reformat the user spec for clarity, structure, and consistency.',
+  'Preserve all original content and intent. Do not add features, change scope, or invent requirements.',
+  'Use bullet points for lists. Use clear section headers. Keep the original language.',
+  'If a section is empty or unclear, leave it as-is. Output valid Markdown only.',
+].join(' ');
 
 type SpecSection = {
   id: string;
@@ -140,22 +158,6 @@ function formatSpec(values: SpecValues, format: Format) {
     .join('\\n\\n');
 }
 
-// Mock function for local model polishing
-async function polishSpecLocally(spec: string): Promise<string> {
-  // Simulate API call or local model processing
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(`**[Polished by Local AI]**\\n${spec.replace(/errors|mistakes/gi, 'improvements').replace(/clear/gi, 'highly clear and concise')}`);
-    }, 1500);
-  });
-}
-
-// Payment Modal Component (deprecated — moved to dedicated /pricing section)
-interface PaymentModalProps {
-  onClose: () => void;
-  onPurchase: (plan: string) => void;
-}
-
 export function App() {
   const [values, setValues] = useState<SpecValues>(initialValues);
   const [format, setFormat] = useState<Format>('markdown');
@@ -166,17 +168,24 @@ export function App() {
     return savedTheme === 'light' ? 'light' : 'dark';
   });
 
-  // New state for local model and payment
-  const [localModelPolishedSpec, setLocalModelPolishedSpec] = useState<string | null>(null);
-  const [specGenerationCount, setSpecGenerationCount] = useState<number>(() => {
-    const savedCount = localStorage.getItem('spec-gen-count');
-    return savedCount ? parseInt(savedCount, 10) : 0;
+  const [plan, setPlan] = useState<Plan>(() => {
+    const saved = localStorage.getItem('specthinker-plan');
+    return saved === 'basic' || saved === 'pro' || saved === 'lifetime' ? saved : 'free';
   });
-  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(() => {
-    const savedPremium = localStorage.getItem('is-premium-user');
-    return savedPremium === 'true';
-  });
+  const [polishedSpec, setPolishedSpec] = useState<string | null>(null);
+  const [isPolishing, setIsPolishing] = useState(false);
+  const [polishError, setPolishError] = useState<string | null>(null);
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+  const [specsUsed, setSpecsUsed] = useState<number>(0);
+  const [backendReady, setBackendReady] = useState<boolean>(api.isConfigured());
   const [cliSection, setCliSection] = useState<'install' | 'usage' | 'why'>('install');
+
+  const isPremium = plan !== 'free';
+  const limits = PLAN_LIMITS[plan];
+  const specsRemaining = Math.max(0, limits.specs - specsUsed);
+  const limitReached = !Number.isFinite(limits.specs) ? false : specsUsed >= limits.specs;
+  const apiConfigured = api.isConfigured();
 
   const missingRequired = useMemo(
     () => sections.filter((section) => section.required && !values[section.id].trim()).map((section) => section.id),
@@ -190,47 +199,138 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('spec-gen-count', specGenerationCount.toString());
-  }, [specGenerationCount]);
+    localStorage.setItem('specthinker-plan', plan);
+  }, [plan]);
 
   useEffect(() => {
-    localStorage.setItem('is-premium-user', isPremiumUser.toString());
-  }, [isPremiumUser]);
+    if (!apiConfigured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await api.fetchSession();
+        if (cancelled) return;
+        setBackendReady(true);
+        if (info.plan !== plan) setPlan(info.plan);
+        setSpecsUsed(info.used.specs);
+      } catch {
+        try {
+          const info = await api.bootstrapSession();
+          if (cancelled) return;
+          setBackendReady(true);
+          if (info.plan !== plan) setPlan(info.plan);
+          setSpecsUsed(info.used.specs);
+        } catch {
+          if (!cancelled) setBackendReady(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash !== '#success') return;
+    const params = new URLSearchParams(window.location.search);
+    const planFromUrl = params.get('plan');
+    const nextPlan: Plan =
+      planFromUrl === 'basic' || planFromUrl === 'pro' || planFromUrl === 'lifetime'
+        ? planFromUrl
+        : 'pro';
+    setPlan(nextPlan);
+    setSpecsUsed(0);
+    setShowWelcomeBanner(true);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
+    const timer = window.setTimeout(() => setShowWelcomeBanner(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function updateValue(id: string, value: string) {
     setValues((current) => ({ ...current, [id]: value }));
     setCopied(false);
-    setLocalModelPolishedSpec(null); // Reset polished spec on input change
+    setPolishedSpec(null);
+    setPolishError(null);
   }
 
   async function copySpec() {
     setAttemptedSubmit(true);
-    if (!canGenerate || !generatedSpec) {
-      return;
-    }
-
-    if (!isPremiumUser && specGenerationCount >= 2) {
+    if (!canGenerate || !generatedSpec) return;
+    if (limitReached) {
       document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-
-    // Polish spec with local model mock
-    const polished = await polishSpecLocally(generatedSpec);
-    setLocalModelPolishedSpec(polished);
-
-    await navigator.clipboard.writeText(polished); // Copy polished spec
+    if (apiConfigured && backendReady) {
+      setQuotaMessage(null);
+    }
+    await navigator.clipboard.writeText(generatedSpec);
     setCopied(true);
+    if (apiConfigured) {
+      try {
+        const info = await api.bootstrapSession();
+        setSpecsUsed(info.used.specs);
+      } catch {
+        // ignore — backend may be down; copy still worked
+      }
+    } else {
+      setSpecsUsed((c) => c + 1);
+    }
+  }
 
-    if (!isPremiumUser) {
-      setSpecGenerationCount((prevCount) => prevCount + 1);
+  async function polishWithAi() {
+    setAttemptedSubmit(true);
+    if (!canGenerate || !generatedSpec) return;
+    if (limitReached) {
+      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (!apiConfigured) return;
+    setIsPolishing(true);
+    setPolishError(null);
+    setQuotaMessage(null);
+    try {
+      const { polished } = await api.polishSpec(generatedSpec);
+      setPolishedSpec(polished);
+      try {
+        const info = await api.fetchSession();
+        setSpecsUsed(info.used.specs);
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      if (err instanceof api.QuotaExceededError) {
+        setQuotaMessage(err.message);
+        setSpecsUsed(limits.specs);
+      } else if (err instanceof api.LlmUnavailableError) {
+        setPolishError(err.message);
+      } else if (err instanceof api.NotConfiguredError) {
+        setPolishError('AI polish is not configured yet.');
+      } else {
+        setPolishError('AI polish failed. Your spec was not modified.');
+      }
+    } finally {
+      setIsPolishing(false);
     }
   }
 
   function resetForm() {
-    setValues(initialValues);
-    setAttemptedSubmit(false);
-    setCopied(false);
-    setLocalModelPolishedSpec(null);
+    if (
+      window.confirm(
+        'Reset the form, clear premium state, and start over? This is for testing.',
+      )
+    ) {
+      setValues(initialValues);
+      setAttemptedSubmit(false);
+      setCopied(false);
+      setPolishedSpec(null);
+      setPolishError(null);
+      setQuotaMessage(null);
+      setPlan('free');
+      setSpecsUsed(0);
+    }
   }
 
   const cliMarkdownBySection: Record<typeof cliSection, string> = {
@@ -287,6 +387,24 @@ python3 spec_cli.py gen --format text
 
   return (
     <main className="app-shell" data-theme={theme}>
+      {showWelcomeBanner && (
+        <div className="premium-banner" role="status">
+          <Sparkles size={18} aria-hidden="true" />
+          <span>
+            Welcome to {PLAN_LABELS[plan]}!{' '}
+            {plan === 'lifetime' ? 'Unlimited specs unlocked.' : `${limits.specs} specs / month unlocked.`}
+          </span>
+          <button
+            type="button"
+            className="premium-banner-close"
+            onClick={() => setShowWelcomeBanner(false)}
+            aria-label="Dismiss"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       <section className="hero-section workspace" aria-labelledby="page-title">
         <header className="topbar">
           <div>
@@ -304,6 +422,7 @@ python3 spec_cli.py gen --format text
             >
               Pricing
             </a>
+            {isPremium && <span className="premium-badge">{PLAN_LABELS[plan]}</span>}
             <button
               className="ghost-button"
               type="button"
@@ -382,51 +501,102 @@ python3 spec_cli.py gen --format text
               })}
             </div>
 
-            <pre className="preview" aria-live="polite">
-              {canGenerate && generatedSpec
-                ? (localModelPolishedSpec || generatedSpec)
-                : 'Fill in the required sections to generate a spec preview.'}
-            </pre>
-            <button className="primary-button" type="button" onClick={copySpec}>
-              <Clipboard size={18} aria-hidden="true" />
-              {copied ? 'Copied' : 'Copy generated spec and Polish with AI'}
-            </button>
-             {!isPremiumUser && (
+            <div className="preview-wrapper">
+              {polishedSpec && <span className="preview-badge">Polished</span>}
+              <pre className="preview" aria-live="polite">
+                {canGenerate && generatedSpec
+                  ? (polishedSpec || generatedSpec)
+                  : 'Fill in the required sections to generate a spec preview.'}
+              </pre>
+            </div>
+
+            <div className="action-buttons">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={copySpec}
+                disabled={!canGenerate || limitReached}
+              >
+                <Clipboard size={18} aria-hidden="true" />
+                {copied ? 'Copied' : isPremium ? 'Copy polished spec' : 'Copy spec'}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={polishWithAi}
+                disabled={!canGenerate || limitReached || isPolishing || !apiConfigured}
+              >
+                <Wand2 size={18} aria-hidden="true" />
+                {isPolishing ? 'Polishing…' : polishedSpec ? 'Re-polish' : 'Polish with AI'}
+              </button>
+            </div>
+
+            {!apiConfigured && (
+              <p className="backend-notice">
+                <strong>Backend not configured.</strong> AI Polish is disabled. Set
+                <code>VITE_API_URL</code> in your <code>.env</code> to enable it.
+              </p>
+            )}
+            {apiConfigured && !backendReady && (
+              <p className="backend-notice">
+                <strong>Backend unreachable.</strong> AI Polish won't work until the backend is up.
+              </p>
+            )}
+
+            {polishError && <p className="error-banner">{polishError}</p>}
+            {quotaMessage && <p className="quota-banner">{quotaMessage}</p>}
+
+            {plan === 'free' && !quotaMessage && (
               <p className="free-generations-text">
-                {2 - specGenerationCount} free generations left.
+                {specsRemaining} of {limits.specs} free specs remaining.
+              </p>
+            )}
+            {plan === 'free' && quotaMessage && (
+              <p className="free-generations-text">
+                <a href="#pricing" onClick={(e) => { e.preventDefault(); document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                  Upgrade to keep generating
+                </a>
+                .
+              </p>
+            )}
+            {plan !== 'free' && (
+              <p className="free-generations-text">
+                {Number.isFinite(limits.specs) ? `${specsRemaining} of ${limits.specs} specs remaining this month.` : 'Unlimited specs.'}
               </p>
             )}
           </aside>
         </div>
       </section>
 
-      {/* Local Model Section */}
+      {/* AI Polish Section */}
       <section className="section-wrapper">
         <div className="local-model-section">
           <div className="local-model-content">
             <div className="local-model-text">
-              <span className="section-eyebrow">Local AI Polishing</span>
-              <h2 className="section-title">Polished specs without leaving your machine.</h2>
+              <span className="section-eyebrow">AI Polish</span>
+              <h2 className="section-title">Cleaner specs in one click.</h2>
               <p>
-                Enhance your spec with our local AI model. It cleans up grammar, clarifies phrasing,
-                and optimizes for AI agent consumption — all running directly on your PC.
+                After you fill out a spec, hit <strong>Polish with AI</strong> and a real language model
+                reformats your draft for clarity and structure. It preserves your intent, fixes
+                vague wording, and tightens scope.
               </p>
               <p>
-                Activates automatically after you generate a spec, keeping every iteration private
-                and lightning fast.
+                Calls run through a backend with smart model fallback, so you stay productive even
+                when one provider is busy. Your spec text is sent over HTTPS to the backend; we
+                don't log the content.
               </p>
               <ul className="local-model-features">
                 <li>
                   <Check size={18} aria-hidden="true" />
-                  <span>Runs entirely on-device — your spec never leaves the browser.</span>
+                  <span>Real LLM (Deepseek / OpenRouter), not a string-replace mock.</span>
                 </li>
                 <li>
                   <Check size={18} aria-hidden="true" />
-                  <span>Context-aware rewrites tuned for AI agent prompts.</span>
+                  <span>Auto-fallback across providers so it rarely fails.</span>
                 </li>
                 <li>
                   <Check size={18} aria-hidden="true" />
-                  <span>Sub-second polish with no API rate limits or usage fees.</span>
+                  <span>Counted against your monthly quota — no surprise overage.</span>
                 </li>
               </ul>
             </div>
@@ -533,8 +703,8 @@ python3 spec_cli.py gen --format text
               </div>
               <div className="workflow-step">
                 <span className="workflow-step-num">2</span>
-                <h4>Polish with local AI</h4>
-                <p>Sharpen wording and tighten scope without sending data to the cloud.</p>
+                <h4>Polish with AI</h4>
+                <p>Sharpen wording and tighten scope with one click. Your text goes through a backend that auto-falls-back across providers.</p>
               </div>
               <div className="workflow-step">
                 <span className="workflow-step-num">3</span>
@@ -655,7 +825,7 @@ python3 spec_cli.py gen --format text
           </div>
 
           <p className="pricing-footnote">
-            All plans include local AI polishing, the spec builder, and Markdown / HTML / plain text export.
+            All plans include AI Polish, the spec builder, and Markdown / HTML / plain text export.
             Subscriptions are billed monthly. Lifetime is a one-time payment.
             Need a team plan? <a href="mailto:hello@specbuild.dev">Contact us</a>.
           </p>
