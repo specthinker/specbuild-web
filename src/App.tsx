@@ -669,12 +669,6 @@ python3 spec_cli.py gen --format text
               </button>
             </div>
 
-            {!apiConfigured && (
-              <p className="backend-notice">
-                <strong>Backend not configured.</strong> AI Polish is disabled. Set
-                <code>VITE_API_URL</code> in your <code>.env</code> to enable it.
-              </p>
-            )}
             {apiConfigured && !backendReady && (
               <p className="backend-notice">
                 <strong>Backend unreachable.</strong> AI Polish won't work until the backend is up.
