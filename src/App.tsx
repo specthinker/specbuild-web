@@ -1,7 +1,9 @@
-import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, ListChecks, LogIn, LogOut, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
+import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, ListChecks, Sparkles, Target, Wand2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
+import { ContactPage } from './components/ContactPage';
 import { SignInModal } from './components/SignInModal';
+import { SiteNav } from './components/SiteNav';
 import * as api from './lib/api';
 import type { Format, SectionKey, Sections } from './lib/api';
 import { useAuth } from './lib/auth';
@@ -205,6 +207,19 @@ function buildSectionsForBackend(values: Sections): Sections {
   };
 }
 
+function scrollToIdFromOtherView(id: string, currentView: 'home' | 'contact', setView: (view: 'home' | 'contact') => void) {
+  if (currentView === 'home') {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  setView('home');
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
 function formatSpecClientSide(values: Sections, format: Format): string {
   const filledSections = getFilledSections(values);
 
@@ -262,6 +277,7 @@ export function App() {
   const [clientId] = useState<string>(() => api.getOrCreateClientId());
   const [signInOpen, setSignInOpen] = useState(false);
   const [signInReason, setSignInReason] = useState<string | undefined>(undefined);
+  const [view, setView] = useState<'home' | 'contact'>('home');
 
   const { user, signOut, refresh: refreshAuth, authError, clearAuthError } = useAuth();
 
@@ -495,6 +511,19 @@ python3 spec_cli.py gen --format text
 
   return (
     <main className="app-shell" data-theme={theme}>
+      <SiteNav
+        view={view}
+        setView={setView}
+        theme={theme}
+        setTheme={setTheme}
+        onOpenSignIn={() => {
+          setSignInReason(undefined);
+          setSignInOpen(true);
+        }}
+        onReset={resetForm}
+        premiumLabel={isPremium ? PLAN_LABELS[effectivePlan] : null}
+      />
+
       {showWelcomeBanner && (
         <div className="premium-banner" role="status">
           <Sparkles size={18} aria-hidden="true" />
@@ -524,65 +553,13 @@ python3 spec_cli.py gen --format text
         </div>
       )}
 
-      <section className="hero-section workspace" aria-labelledby="page-title">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Spec Builder</p>
-            <h1 id="page-title">Create a complete software spec</h1>
-          </div>
-          <div className="topbar-actions">
-            <a
-              className="ghost-button"
-              href="#pricing"
-              onClick={(event) => {
-                event.preventDefault();
-                document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            >
-              Pricing
-            </a>
-            {isPremium && <span className="premium-badge">{PLAN_LABELS[effectivePlan]}</span>}
-            {apiConfigured && (user ? (
-              <div className="auth-cluster">
-                {user.email && <span className="auth-email" title={user.email}>{user.email}</span>}
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => void signOut()}
-                  aria-label="Sign out"
-                >
-                  <LogOut size={18} aria-hidden="true" />
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => {
-                  setSignInReason(undefined);
-                  setSignInOpen(true);
-                }}
-              >
-                <LogIn size={18} aria-hidden="true" />
-                Sign in
-              </button>
-            ))}
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-              {theme === 'dark' ? 'Light' : 'Dark'}
-            </button>
-            <button className="ghost-button" type="button" onClick={resetForm}>
-              <RefreshCcw size={18} aria-hidden="true" />
-              Reset
-            </button>
-          </div>
-        </header>
+      {view === 'home' ? (
+        <>
+          <section id="top" className="hero-section workspace" aria-labelledby="page-title">
+            <header className="hero-header">
+              <p className="eyebrow">Spec Builder</p>
+              <h1 id="page-title">Create a complete software spec</h1>
+            </header>
 
         <div className="builder-grid">
           <form className="spec-form" onSubmit={(event) => event.preventDefault()}>
@@ -769,7 +746,7 @@ python3 spec_cli.py gen --format text
       </section>
 
       {/* Marketing Section */}
-      <section className="section-wrapper">
+      <section id="features" className="section-wrapper">
         <div className="marketing-section">
           <div className="marketing-content">
             <div className="marketing-headline">
@@ -833,7 +810,7 @@ python3 spec_cli.py gen --format text
       </section>
 
       {/* CLI Section */}
-      <section className="section-wrapper">
+      <section id="cli" className="section-wrapper">
         <div className="cli-section">
           <div className="section-header">
             <span className="section-eyebrow">CLI Version</span>
@@ -941,19 +918,34 @@ python3 spec_cli.py gen --format text
           </div>
 
           <p className="pricing-footnote">
-            Billed monthly. Cancel anytime. Need a team plan? <a href="mailto:hello@specbuild.dev">Contact us</a>.
+            Billed monthly. Cancel anytime. Need a team plan?{' '}
+            <button type="button" className="link-button" onClick={() => setView('contact')}>Contact us</button>.
           </p>
         </div>
       </section>
+        </>
+      ) : (
+        <ContactPage onBack={() => setView('home')} />
+      )}
 
       <footer className="site-footer">
         <div className="site-footer-content">
           <p>Tired of double, triple, quadruple prompting for your AI to make something? Spec Builder gives you a clearly defined spec for your AI agents.</p>
           <div className="site-footer-links">
-            <a href="#top">Back to top</a>
-            <a href="#features">Features</a>
-            <a href="#cli">CLI</a>
-            <a href="#pricing">Pricing</a>
+            <a
+              href="#top"
+              onClick={(event) => {
+                if (view !== 'home') {
+                  event.preventDefault();
+                  setView('home');
+                  window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+                }
+              }}
+            >Back to top</a>
+            <a href="#features" onClick={(event) => { event.preventDefault(); scrollToIdFromOtherView('features', view, setView); }}>Features</a>
+            <a href="#cli" onClick={(event) => { event.preventDefault(); scrollToIdFromOtherView('cli', view, setView); }}>CLI</a>
+            <a href="#pricing" onClick={(event) => { event.preventDefault(); scrollToIdFromOtherView('pricing', view, setView); }}>Pricing</a>
+            <button type="button" className="site-footer-link-button" onClick={() => setView('contact')}>Contact</button>
           </div>
           <p>&copy; {new Date().getFullYear()} Spec Builder. Crafted for builders.</p>
         </div>

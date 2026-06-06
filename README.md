@@ -4,6 +4,8 @@ A focused web app for turning a rough idea into a clean, AI-ready software spec 
 
 **[Open the app](https://specthinker.github.io/specbuild-web/)**
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/specthinker/specbuild-web)
+
 ## What it does
 
 Spec Builder gives you a structured form covering the seven sections every good spec needs: Goal, Scope, Files, Rules, Acceptance Criteria, Verification, and Output. Fill them in, and you get a polished Markdown, plain-text, or HTML spec you can hand to any AI coding agent.
@@ -31,11 +33,46 @@ Spec Builder exists to fix that:
 Two free specs to try it. From there:
 
 - **Basic — $5/mo** — 30 specs a month.
-- **Pro — $15/mo** — 100 specs a month.
-- **Lifetime — $100 once** — unlimited specs, forever.
 
 See the live [pricing page](https://specthinker.github.io/specbuild-web/#pricing) for the latest.
+
+## Contact form
+
+The **Contact** link in the top nav opens a bug-report / feedback form. Delivery is wired to [Formspree](https://formspree.io) (free, ~2 min setup, 50 submissions/month). If `VITE_FORMSPREE_ID` is left empty, the form falls back to opening the visitor's mail app with a pre-filled message to `VITE_CONTACT_EMAIL` — still works, just less polished.
+
+To enable proper form delivery:
+
+1. Sign up at https://formspree.io using the address you want submissions delivered to (default: `muhammadkonecom@gmail.com`).
+2. Click **New Form** and set the notification email to that same address.
+3. Copy the form ID (looks like `xyzabc123`) from the form's endpoint URL.
+4. Add it to `.env`:
+   ```
+   VITE_CONTACT_EMAIL=muhammadkonecom@gmail.com
+   VITE_FORMSPREE_ID=xyzabc123
+   ```
+5. Redeploy. The Contact page will now show "Delivered via secure form" and POST submissions to Formspree, which forwards them to your inbox.
 
 ## Tech
 
 Vite + React + TypeScript. AI Polish runs through a small backend that auto-falls-back across Deepseek and OpenRouter. No accounts, no DB on the client — just a signed session cookie.
+
+## Deploying to Render
+
+The repo ships a `render.yaml` blueprint so the frontend can sit next to the backend on Render.
+
+**One-click:** click the **Deploy to Render** badge at the top of this README. Render reads `render.yaml`, creates a static site, builds with `npm install && npm run build`, publishes `dist/`, and wires the env vars below.
+
+**Manual:**
+
+1. Push this repo to GitHub.
+2. In Render, **New → Static Site** → connect the repo.
+3. Build command: `npm install && npm run build`
+4. Publish directory: `dist`
+5. Add env vars:
+   - `VITE_API_URL` — `https://specbuild-backend.onrender.com` (or your backend URL)
+   - `VITE_CONTACT_EMAIL` — the address contact-form submissions should go to
+   - `VITE_FORMSPREE_ID` — Formspree form ID (see [Contact form](#contact-form) above). Leave empty to fall back to a `mailto:` link.
+
+Render serves `VITE_*` env vars at **build time** and bakes them into the bundle, so any change requires a rebuild / redeploy.
+
+> Don't forget to whitelist the new Render frontend URL in your backend's CORS allow-list (Spring's `CorsConfiguration` / `allowedOrigins`).
