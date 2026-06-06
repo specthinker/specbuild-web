@@ -1,10 +1,12 @@
 /**
  * Thin client for the SpecBuild backend (Kotlin/Spring Boot).
  *
- * Source of truth: FRONTEND_INTEGRATION.md in the repo root.
+ * Source of truth: SPEC-auth.md + FRONTEND_INTEGRATION.md in the repo root.
  *
  * Base URL is read from VITE_API_URL. All endpoints live under /api/v1.
- * Auth: none. CORS: open.
+ * Auth: signed HttpOnly session cookie. Anonymous browsing also works
+ * via a clientId in localStorage for quota tracking. Requests always send
+ * cookies via `credentials: 'include'`.
  *
  * If VITE_API_URL is missing, all calls throw NotConfiguredError so the
  * frontend can show a friendly empty state.
@@ -201,6 +203,7 @@ function throwForResponse(res: Response, body: ErrorBody): never {
 async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   ensureConfigured();
   const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -217,6 +220,7 @@ async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> 
 async function textRequest(path: string, init: RequestInit = {}): Promise<string> {
   ensureConfigured();
   const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -238,7 +242,7 @@ function formatPath(format: Format): string {
 /* ----- Health ----- */
 export async function getHealth(): Promise<{ status: 'UP' | 'DOWN' }> {
   ensureConfigured();
-  const res = await fetch(`${API_URL}/actuator/health`);
+  const res = await fetch(`${API_URL}/actuator/health`, { credentials: 'include' });
   if (!res.ok) throw new BackendError(`Backend unhealthy (${res.status}).`, res.status, 'unhealthy');
   return (await res.json()) as { status: 'UP' | 'DOWN' };
 }
@@ -265,7 +269,10 @@ export function updateSpec(id: string, req: UpdateSpecRequest): Promise<Spec> {
 
 export function deleteSpec(id: string): Promise<void> {
   ensureConfigured();
-  return fetch(`${API_BASE}/specs/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((res) => {
+  return fetch(`${API_BASE}/specs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  }).then((res) => {
     if (!res.ok) {
       return readErrorBody(res).then((body) => throwForResponse(res, body));
     }
@@ -291,4 +298,88 @@ export function polishSpec(req: PolishRequest): Promise<PolishResponse> {
 
 export function getQuota(clientId: string): Promise<QuotaState> {
   return jsonRequest<QuotaState>('/llm/quota', { method: 'POST', body: JSON.stringify({ clientId }) });
+}
+
+/* ----- Auth ----- */
+
+export type Plan = 'free' | 'basic' | 'pro' | 'lifetime';
+
+export interface AuthUser {
+  userId: string;
+  email: string | null;
+  plan: Plan;
+  isAnonymous: boolean;
+  quota: QuotaState | null;
+}
+
+export class NotAuthenticatedError extends Error {
+  constructor() {
+    super('Not signed in.');
+    this.name = 'NotAuthenticatedError';
+  }
+}
+
+/**
+ * Returns the current signed-in user, or null if no session exists.
+ *
+ * Backend contract:
+ *   GET /api/v1/auth/me
+ *   200 -> AuthUser
+ *   401 -> null (no session)
+ */
+export async function getMe(): Promise<AuthUser | null> {
+  ensureConfigured();
+  const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    const body = await readErrorBody(res);
+    throwForResponse(res, body);
+  }
+  return (await res.json()) as AuthUser;
+}
+
+/**
+ * Request a magic sign-in link by email.
+ * Backend emails a one-click link; clicking it lands the user back on the
+ * frontend at `?signed_in=1` with a session cookie set.
+ *
+ * Backend contract:
+ *   POST /api/v1/auth/email/request  { email }
+ *   202 -> {} (link sent, or silently no-op if email is invalid)
+ */
+export function requestEmailLink(email: string): Promise<void> {
+  return jsonRequest<void>('/auth/email/request', {
+    method: 'POST',
+    body: JSON.stringify({ email, redirect: window.location.origin + window.location.pathname }),
+  });
+}
+
+/**
+ * Returns the URL to navigate to in order to start Google OAuth.
+ * The backend handles the OAuth dance and redirects back to the frontend
+ * at `?signed_in=1` once a session cookie is set.
+ */
+export function googleSignInUrl(): string {
+  ensureConfigured();
+  const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+  return `${API_BASE}/auth/google/start?redirect=${redirect}`;
+}
+
+/**
+ * Ends the current session. Backend clears the cookie.
+ *
+ * Backend contract:
+ *   POST /api/v1/auth/logout
+ *   204
+ */
+export async function logout(): Promise<void> {
+  ensureConfigured();
+  const res = await fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok && res.status !== 401) {
+    const body = await readErrorBody(res);
+    throwForResponse(res, body);
+  }
 }

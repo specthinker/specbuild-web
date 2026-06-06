@@ -1,8 +1,10 @@
-import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, ListChecks, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
+import { ArrowRight, Check, Clipboard, Code2, FileText, GitBranch, Lightbulb, ListChecks, LogIn, LogOut, Moon, RefreshCcw, Sparkles, Sun, Target, Wand2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
+import { SignInModal } from './components/SignInModal';
 import * as api from './lib/api';
 import type { Format, SectionKey, Sections } from './lib/api';
+import { useAuth } from './lib/auth';
 
 const STRIPE = {
   basicPaymentLink: 'https://buy.stripe.com/8x2dR90rw3otcSp4aS6Zy00',
@@ -15,6 +17,15 @@ const PLAN_LABELS: Record<Plan, string> = {
   free: 'Free',
   basic: 'Basic',
 };
+
+/** Append Stripe Payment Link params so the webhook can match user→payment. */
+function buildStripeLink(base: string, user: api.AuthUser | null): string {
+  if (!user) return base;
+  const url = new URL(base);
+  url.searchParams.set('client_reference_id', user.userId);
+  if (user.email) url.searchParams.set('prefilled_email', user.email);
+  return url.toString();
+}
 
 type SpecSection = {
   id: SectionKey;
@@ -240,8 +251,16 @@ export function App() {
   const [backendReady, setBackendReady] = useState<boolean>(api.isConfigured());
   const [cliSection, setCliSection] = useState<'install' | 'usage' | 'why'>('install');
   const [clientId] = useState<string>(() => api.getOrCreateClientId());
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [signInReason, setSignInReason] = useState<string | undefined>(undefined);
 
-  const isPremium = plan !== 'free';
+  const { user, signOut, refresh: refreshAuth } = useAuth();
+
+  const backendPlan = user?.plan;
+  const effectivePlan: Plan = backendPlan === 'basic' || backendPlan === 'pro' || backendPlan === 'lifetime'
+    ? 'basic'
+    : plan;
+  const isPremium = effectivePlan !== 'free';
   const apiConfigured = api.isConfigured();
   const missingRequired = useMemo(
     () =>
@@ -292,6 +311,14 @@ export function App() {
     };
   }, [apiConfigured, clientId]);
 
+  // When the signed-in user changes, prefer their server-side quota.
+  useEffect(() => {
+    if (user?.quota) {
+      setQuota(user.quota);
+      setQuotaExhausted(user.quota.used >= user.quota.limit);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (window.location.hash !== '#success') return;
     const params = new URLSearchParams(window.location.search);
@@ -302,9 +329,12 @@ export function App() {
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
+    // Stripe webhook should have updated the user record by the time the
+    // browser is redirected back. Refresh /me to pick up the new plan.
+    void refreshAuth();
     const timer = window.setTimeout(() => setShowWelcomeBanner(false), 6000);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [refreshAuth]);
 
   function updateValue(id: SectionKey, value: string) {
     setValues((current) => ({ ...current, [id]: value }));
@@ -459,7 +489,7 @@ python3 spec_cli.py gen --format text
       {showWelcomeBanner && (
         <div className="premium-banner" role="status">
           <Sparkles size={18} aria-hidden="true" />
-          <span>Welcome to {PLAN_LABELS[plan]}!</span>
+          <span>Welcome to {PLAN_LABELS[effectivePlan]}!</span>
           <button
             type="button"
             className="premium-banner-close"
@@ -488,7 +518,33 @@ python3 spec_cli.py gen --format text
             >
               Pricing
             </a>
-            {isPremium && <span className="premium-badge">{PLAN_LABELS[plan]}</span>}
+            {isPremium && <span className="premium-badge">{PLAN_LABELS[effectivePlan]}</span>}
+            {apiConfigured && (user ? (
+              <div className="auth-cluster">
+                {user.email && <span className="auth-email" title={user.email}>{user.email}</span>}
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void signOut()}
+                  aria-label="Sign out"
+                >
+                  <LogOut size={18} aria-hidden="true" />
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setSignInReason(undefined);
+                  setSignInOpen(true);
+                }}
+              >
+                <LogIn size={18} aria-hidden="true" />
+                Sign in
+              </button>
+            ))}
             <button
               className="ghost-button"
               type="button"
@@ -832,10 +888,18 @@ python3 spec_cli.py gen --format text
               </ul>
               <a
                 className="pricing-card-button primary"
-                href={STRIPE.basicPaymentLink}
+                href={buildStripeLink(STRIPE.basicPaymentLink, user)}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Subscribe to Basic plan for $5 per month"
+                onClick={(event) => {
+                  if (!apiConfigured) return;
+                  if (!user) {
+                    event.preventDefault();
+                    setSignInReason('Sign in first so your purchase follows you to every device.');
+                    setSignInOpen(true);
+                  }
+                }}
               >
                 Choose Basic
                 <ArrowRight size={16} aria-hidden="true" />
@@ -861,6 +925,12 @@ python3 spec_cli.py gen --format text
           <p>&copy; {new Date().getFullYear()} Spec Builder. Crafted for builders.</p>
         </div>
       </footer>
+
+      <SignInModal
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        reason={signInReason}
+      />
     </main>
   );
 }
