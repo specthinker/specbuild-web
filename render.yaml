@@ -9,8 +9,6 @@ services:
         value: https://specbuild-backend.onrender.com
       - key: VITE_CONTACT_EMAIL
         value: muhammadkonecom@gmail.com
-      - key: VITE_FORMSPREE_ID
-        value: xrevevwv
     headers:
       - path: /*
         name: Cache-Control

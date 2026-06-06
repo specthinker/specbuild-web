@@ -38,19 +38,9 @@ See the live [pricing page](https://specthinker.github.io/specbuild-web/#pricing
 
 ## Contact form
 
-The **Contact** link in the top nav opens a bug-report / feedback form. Delivery is wired to [Formspree](https://formspree.io) (free, ~2 min setup, 50 submissions/month). If `VITE_FORMSPREE_ID` is left empty, the form falls back to opening the visitor's mail app with a pre-filled message to `VITE_CONTACT_EMAIL` — still works, just less polished.
+The **Contact** link in the top nav opens a bug-report / feedback form. Out of the box it opens the visitor's mail app with a pre-filled message to `VITE_CONTACT_EMAIL` (default: `muhammadkonecom@gmail.com`) — zero setup, works immediately.
 
-To enable proper form delivery:
-
-1. Sign up at https://formspree.io using the address you want submissions delivered to (default: `muhammadkonecom@gmail.com`).
-2. Click **New Form** and set the notification email to that same address.
-3. Copy the form ID (looks like `xyzabc123`) from the form's endpoint URL.
-4. Add it to `.env`:
-   ```
-   VITE_CONTACT_EMAIL=muhammadkonecom@gmail.com
-   VITE_FORMSPREE_ID=xyzabc123
-   ```
-5. Redeploy. The Contact page will now show "Delivered via secure form" and POST submissions to Formspree, which forwards them to your inbox.
+To upgrade to a proper in-page form (no mail-app round-trip), set `VITE_FORMSPREE_ID` in your deploy platform's env-var UI (e.g. Render dashboard) to a form ID from https://formspree.io (free, 50 submissions/month). Don't commit the ID to the repo.
 
 ## Tech
 
@@ -71,7 +61,7 @@ The repo ships a `render.yaml` blueprint so the frontend can sit next to the bac
 5. Add env vars:
    - `VITE_API_URL` — `https://specbuild-backend.onrender.com` (or your backend URL)
    - `VITE_CONTACT_EMAIL` — the address contact-form submissions should go to
-   - `VITE_FORMSPREE_ID` — Formspree form ID (see [Contact form](#contact-form) above). Leave empty to fall back to a `mailto:` link.
+   - `VITE_FORMSPREE_ID` — optional, Formspree form ID (see [Contact form](#contact-form) above). Leave empty to fall back to a `mailto:` link.
 
 Render serves `VITE_*` env vars at **build time** and bakes them into the bundle, so any change requires a rebuild / redeploy.
 
