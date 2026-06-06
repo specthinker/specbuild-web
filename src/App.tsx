@@ -62,13 +62,6 @@ const sections: SpecSection[] = [
     prompts: ['What is included?', 'What is excluded?', 'What assumptions may be made?'],
   },
   {
-    id: 'files',
-    title: 'Files',
-    required: true,
-    placeholder: 'May change: src/App.tsx, src/lib/api.ts. Must not change: vite.config.ts. New: src/components/TitleInput.tsx.',
-    prompts: ['What files or directories may change?', 'What must not change?', 'What new files may be created?'],
-  },
-  {
     id: 'rules',
     title: 'Rules',
     required: true,
@@ -107,7 +100,6 @@ const formatOptions: Array<{ id: Format; label: string; icon: typeof FileText }>
 const initialValues: Sections = {
   goal: '',
   scope: '',
-  files: '',
   rules: '',
   acceptanceCriteria: '',
   verification: '',
@@ -117,7 +109,6 @@ const initialValues: Sections = {
 const sectionNameToKey: Array<[RegExp, SectionKey]> = [
   [/goal|outcome/i, 'goal'],
   [/scope/i, 'scope'],
-  [/files?|directories?/i, 'files'],
   [/rules?|constraints?/i, 'rules'],
   [/acceptance|done/i, 'acceptanceCriteria'],
   [/verif|test|evidence|manual/i, 'verification'],
@@ -199,7 +190,6 @@ function buildSectionsForBackend(values: Sections): Sections {
   return {
     goal: values.goal ?? '',
     scope: values.scope ?? '',
-    files: values.files ?? '',
     rules: values.rules ?? '',
     acceptanceCriteria: values.acceptanceCriteria ?? '',
     verification: values.verification ?? '',

@@ -76,7 +76,6 @@ export class BackendError extends Error {
 export type SectionKey =
   | 'goal'
   | 'scope'
-  | 'files'
   | 'rules'
   | 'acceptanceCriteria'
   | 'verification'
