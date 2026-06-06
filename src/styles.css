@@ -467,6 +467,47 @@ input.title-input[aria-invalid="true"] {
   background: rgba(0, 0, 0, 0.15);
 }
 
+/* Auth callback error banner (e.g. expired magic link) */
+.auth-error-banner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #5A2A1F 80%, var(--border));
+  background: color-mix(in srgb, #5A2A1F 30%, var(--panel-strong));
+  color: #FBD1C8;
+  font-size: 0.9rem;
+}
+
+.auth-error-banner span {
+  flex: 1;
+}
+
+.auth-error-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.auth-error-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in srgb, #5A2A1F 60%, transparent);
+}
+
 /* Premium badge in topbar */
 .premium-badge {
   display: inline-flex;
@@ -2017,9 +2058,39 @@ input.title-input[aria-invalid="true"] {
 }
 
 .signin-error {
-  margin: 4px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #5A2A1F 70%, var(--border));
+  background: color-mix(in srgb, #5A2A1F 35%, var(--panel-strong));
   color: #FBD1C8;
   font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.signin-error-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.signin-error-dismiss:hover {
+  background: color-mix(in srgb, #5A2A1F 60%, transparent);
 }
 
 .signin-sent {

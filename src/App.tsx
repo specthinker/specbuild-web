@@ -11,11 +11,20 @@ const STRIPE = {
 } as const;
 
 type Theme = 'dark' | 'light';
-type Plan = 'free' | 'basic';
 
-const PLAN_LABELS: Record<Plan, string> = {
+const PLAN_LABELS: Record<api.Plan, string> = {
   free: 'Free',
   basic: 'Basic',
+  pro: 'Pro',
+  lifetime: 'Lifetime',
+};
+
+/** Daily AI Polish limits per plan, in the paywall copy. */
+const PLAN_DAILY_QUOTA: Record<api.Plan, number> = {
+  free: 5,
+  basic: 30,
+  pro: 200,
+  lifetime: 1000,
 };
 
 /** Append Stripe Payment Link params so the webhook can match user→payment. */
@@ -236,9 +245,9 @@ export function App() {
   });
 
   const [title, setTitle] = useState<string>('Untitled spec');
-  const [plan, setPlan] = useState<Plan>(() => {
+  const [plan, setPlan] = useState<api.Plan>(() => {
     const saved = localStorage.getItem('specthinker-plan');
-    return saved === 'basic' ? 'basic' : 'free';
+    return saved === 'basic' || saved === 'pro' || saved === 'lifetime' ? saved : 'free';
   });
   const [polishedSpec, setPolishedSpec] = useState<string | null>(null);
   const [isPolishing, setIsPolishing] = useState(false);
@@ -254,12 +263,10 @@ export function App() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [signInReason, setSignInReason] = useState<string | undefined>(undefined);
 
-  const { user, signOut, refresh: refreshAuth } = useAuth();
+  const { user, signOut, refresh: refreshAuth, authError, clearAuthError } = useAuth();
 
   const backendPlan = user?.plan;
-  const effectivePlan: Plan = backendPlan === 'basic' || backendPlan === 'pro' || backendPlan === 'lifetime'
-    ? 'basic'
-    : plan;
+  const effectivePlan: api.Plan = backendPlan ?? plan;
   const isPremium = effectivePlan !== 'free';
   const apiConfigured = api.isConfigured();
   const missingRequired = useMemo(
@@ -321,19 +328,21 @@ export function App() {
 
   useEffect(() => {
     if (window.location.hash !== '#success') return;
-    const params = new URLSearchParams(window.location.search);
-    const planFromUrl = params.get('plan');
-    setPlan(planFromUrl === 'basic' ? 'basic' : 'free');
     setShowWelcomeBanner(true);
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
-    // Stripe webhook should have updated the user record by the time the
-    // browser is redirected back. Refresh /me to pick up the new plan.
+    // Trust the webhook, not the URL. /auth/me will return the new plan
+    // once the backend has applied the Stripe event.
     void refreshAuth();
+    // Retry once after a short delay in case the webhook lands a beat late.
+    const retry = window.setTimeout(() => { void refreshAuth(); }, 1500);
     const timer = window.setTimeout(() => setShowWelcomeBanner(false), 6000);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(retry);
+      window.clearTimeout(timer);
+    };
   }, [refreshAuth]);
 
   function updateValue(id: SectionKey, value: string) {
@@ -497,6 +506,20 @@ python3 spec_cli.py gen --format text
             aria-label="Dismiss"
           >
             <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {authError && !signInOpen && (
+        <div className="auth-error-banner" role="alert">
+          <span>{authError}</span>
+          <button
+            type="button"
+            className="auth-error-dismiss"
+            onClick={clearAuthError}
+            aria-label="Dismiss"
+          >
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -882,7 +905,17 @@ python3 spec_cli.py gen --format text
               </div>
               <ul className="pricing-card-features">
                 <li><Check size={16} aria-hidden="true" /><span>Unlimited spec generations</span></li>
-                <li><Check size={16} aria-hidden="true" /><span>AI Polish with Deepseek / OpenRouter fallback</span></li>
+                <li>
+                  <Check size={16} aria-hidden="true" />
+                  <span>
+                    AI Polish with Deepseek / OpenRouter fallback
+                    {' — '}
+                    {PLAN_DAILY_QUOTA.basic} per day
+                    {user?.plan === 'basic' && quota
+                      ? ` (${quota.used} used today)`
+                      : ''}
+                  </span>
+                </li>
                 <li><Check size={16} aria-hidden="true" /><span>Markdown, HTML, and plain text export</span></li>
                 <li><Check size={16} aria-hidden="true" /><span>Cancel anytime</span></li>
               </ul>

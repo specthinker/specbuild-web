@@ -12,7 +12,7 @@ interface SignInModalProps {
 type Status = 'idle' | 'sending' | 'sent' | 'error';
 
 export function SignInModal({ open, onClose, reason }: SignInModalProps) {
-  const { requestEmailLink, googleSignInUrl } = useAuth();
+  const { requestEmailLink, googleSignInUrl, authError, clearAuthError } = useAuth();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +46,7 @@ export function SignInModal({ open, onClose, reason }: SignInModalProps) {
     if (!trimmed) return;
     setStatus('sending');
     setError(null);
+    clearAuthError();
     try {
       await requestEmailLink(trimmed);
       setStatus('sent');
@@ -56,8 +57,11 @@ export function SignInModal({ open, onClose, reason }: SignInModalProps) {
   }
 
   function onGoogle() {
+    clearAuthError();
     window.location.href = googleSignInUrl();
   }
+
+  const bannerError = error ?? authError;
 
   return (
     <div className="signin-overlay" role="dialog" aria-modal="true" aria-labelledby="signin-title" onClick={onClose}>
@@ -70,6 +74,20 @@ export function SignInModal({ open, onClose, reason }: SignInModalProps) {
         <p className="signin-sub">
           {reason ?? 'Keep your purchase and quota in sync across every device you use.'}
         </p>
+
+        {bannerError && (
+          <p className="signin-error" role="alert">
+            {bannerError}
+            <button
+              type="button"
+              className="signin-error-dismiss"
+              onClick={() => { setError(null); clearAuthError(); }}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </p>
+        )}
 
         <button type="button" className="signin-google" onClick={onGoogle}>
           <GoogleGlyph />
@@ -110,7 +128,6 @@ export function SignInModal({ open, onClose, reason }: SignInModalProps) {
                 {status === 'sending' ? 'Sending…' : 'Send link'}
               </button>
             </div>
-            {status === 'error' && error && <p className="signin-error">{error}</p>}
           </form>
         )}
 

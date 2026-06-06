@@ -4,8 +4,11 @@
  * Single source of truth for "who is the current user, and what's their plan".
  *
  * On mount:
- *   - Strips ?signed_in / ?signed_out from the URL (added by backend redirect)
- *   - Calls GET /auth/me to load the current user, if a session cookie exists
+ *   - Reads the ?signed_in / ?signed_in=0&error=... params the backend
+ *     tacks on after an email or Google callback redirect.
+ *   - Strips them from the URL.
+ *   - Refreshes /auth/me so a successful sign-in becomes visible.
+ *   - Exposes any sign-in failure in `authError` for the UI to render.
  *
  * Anonymous users get `user === null`. The polish flow still works via
  * clientId for them; we just don't show "you're signed in".
@@ -17,6 +20,10 @@ import * as api from './api';
 interface AuthState {
   user: api.AuthUser | null;
   loading: boolean;
+  /** Last sign-in failure (e.g. invalid magic link). Cleared on next attempt. */
+  authError: string | null;
+  /** Dismiss the current authError. */
+  clearAuthError: () => void;
   /** Reload the user from /auth/me. Use after sign-in / sign-out / polish. */
   refresh: () => Promise<void>;
   /** Sign out and clear local state. */
@@ -29,26 +36,32 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
+  invalid_token: 'That sign-in link is no longer valid. Try signing in again.',
+  token_expired: 'That sign-in link has expired. Try signing in again.',
+  email_send_failed: 'We couldn\u2019t email you a link. Try again in a moment.',
+};
+
 /**
- * Removes the auth-related query params the backend tacks on after a
- * successful sign-in or sign-out redirect, without losing other params.
+ * Pulls the auth-related query params the backend tacks on after a callback
+ * redirect, removes them from the URL, and reports what happened.
  */
-function stripAuthQueryParams(): { signedIn: boolean; signedOut: boolean } {
-  if (typeof window === 'undefined') return { signedIn: false, signedOut: false };
+function consumeAuthQueryParams(): { signedIn: boolean; errorCode: string | null } {
+  if (typeof window === 'undefined') return { signedIn: false, errorCode: null };
   const url = new URL(window.location.href);
-  const signedIn = url.searchParams.has('signed_in');
-  const signedOut = url.searchParams.has('signed_out');
-  if (signedIn || signedOut) {
-    url.searchParams.delete('signed_in');
-    url.searchParams.delete('signed_out');
-    window.history.replaceState(null, '', url.toString());
-  }
-  return { signedIn, signedOut };
+  const signedInRaw = url.searchParams.get('signed_in');
+  const errorCode = url.searchParams.get('error');
+  const signedIn = signedInRaw === '1';
+  url.searchParams.delete('signed_in');
+  url.searchParams.delete('error');
+  window.history.replaceState(null, '', url.toString());
+  return { signedIn, errorCode };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<api.AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(api.isConfigured());
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!api.isConfigured()) {
@@ -76,17 +89,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const requestEmailLink = useCallback(async (email: string) => {
-    await api.requestEmailLink(email);
+    setAuthError(null);
+    const clientId = api.getOrCreateClientId();
+    try {
+      await api.requestEmailLink(email, clientId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not send link. Try again.';
+      setAuthError(message);
+      throw err;
+    }
   }, []);
 
+  const clearAuthError = useCallback(() => setAuthError(null), []);
+
   useEffect(() => {
-    stripAuthQueryParams();
-    void refresh();
+    const { signedIn, errorCode } = consumeAuthQueryParams();
+    if (errorCode) {
+      setAuthError(SIGN_IN_ERROR_MESSAGES[errorCode] ?? 'Sign-in failed. Try again.');
+    }
+    void refresh().then(() => {
+      // If the callback succeeded, the user is now non-null. No extra work.
+      // We don't need to act on signedIn itself; refresh() is the truth.
+      if (signedIn) setAuthError(null);
+    });
   }, [refresh]);
 
   const value: AuthState = {
     user,
     loading,
+    authError,
+    clearAuthError,
     refresh,
     signOut,
     requestEmailLink,

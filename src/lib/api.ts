@@ -343,14 +343,29 @@ export async function getMe(): Promise<AuthUser | null> {
  * Backend emails a one-click link; clicking it lands the user back on the
  * frontend at `?signed_in=1` with a session cookie set.
  *
+ * Pass the anonymous `clientId` so the backend can merge the anon quota
+ * counter into the new user on verify.
+ *
  * Backend contract:
- *   POST /api/v1/auth/email/request  { email }
- *   202 -> {} (link sent, or silently no-op if email is invalid)
+ *   POST /api/v1/auth/email/request  { email, redirect, clientId? }
+ *   202 -> empty body (link sent, or silently no-op if email is invalid)
  */
-export function requestEmailLink(email: string): Promise<void> {
-  return jsonRequest<void>('/auth/email/request', {
+export function requestEmailLink(email: string, clientId?: string): Promise<void> {
+  ensureConfigured();
+  const body: { email: string; redirect: string; clientId?: string } = {
+    email,
+    redirect: window.location.origin + window.location.pathname,
+  };
+  if (clientId) body.clientId = clientId;
+  return fetch(`${API_BASE}/auth/email/request`, {
     method: 'POST',
-    body: JSON.stringify({ email, redirect: window.location.origin + window.location.pathname }),
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (res.ok || res.status === 202) return;
+    const errBody = await readErrorBody(res);
+    throwForResponse(res, errBody);
   });
 }
 
