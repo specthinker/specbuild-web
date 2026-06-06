@@ -272,7 +272,6 @@ export function App() {
   const [quota, setQuota] = useState<api.QuotaState | null>(null);
   const [quotaExhausted, setQuotaExhausted] = useState(false);
   const [lastProvider, setLastProvider] = useState<string | null>(null);
-  const [backendReady, setBackendReady] = useState<boolean>(api.isConfigured());
   const [cliSection, setCliSection] = useState<'install' | 'usage' | 'why'>('install');
   const [clientId] = useState<string>(() => api.getOrCreateClientId());
   const [signInOpen, setSignInOpen] = useState(false);
@@ -313,20 +312,13 @@ export function App() {
     let cancelled = false;
     (async () => {
       try {
-        await api.getHealth();
-        if (cancelled) return;
-        setBackendReady(true);
-        try {
-          const q = await api.getQuota(clientId);
-          if (!cancelled) {
-            setQuota(q);
-            setQuotaExhausted(q.used >= q.limit);
-          }
-        } catch {
-          // quota fetch is best-effort
+        const q = await api.getQuota(clientId);
+        if (!cancelled) {
+          setQuota(q);
+          setQuotaExhausted(q.used >= q.limit);
         }
       } catch {
-        if (!cancelled) setBackendReady(false);
+        // quota fetch is best-effort
       }
     })();
     return () => {
@@ -401,7 +393,7 @@ export function App() {
 
   async function polishWithAi() {
     if (!canGenerate) return;
-    if (!apiConfigured || !backendReady) return;
+    if (!apiConfigured) return;
     if (quotaExhausted) {
       setQuotaMessage('Daily polish quota reached. Resets at midnight UTC.');
       return;
@@ -662,23 +654,17 @@ python3 spec_cli.py gen --format text
                 className="secondary-button"
                 type="button"
                 onClick={polishWithAi}
-                disabled={!canGenerate || isPolishing || !apiConfigured || !backendReady || quotaExhausted}
+                disabled={!canGenerate || isPolishing || !apiConfigured || quotaExhausted}
               >
                 <Wand2 size={18} aria-hidden="true" />
                 {isPolishing ? 'Polishing…' : polishedSpec ? 'Re-polish' : 'Polish with AI'}
               </button>
             </div>
 
-            {apiConfigured && !backendReady && (
-              <p className="backend-notice">
-                <strong>Backend unreachable.</strong> AI Polish won't work until the backend is up.
-              </p>
-            )}
-
             {polishError && <p className="error-banner">{polishError}</p>}
             {quotaMessage && <p className="quota-banner">{quotaMessage}</p>}
 
-            {apiConfigured && backendReady && quota && (
+            {apiConfigured && quota && (
               <p className="free-generations-text">
                 {quota.used} of {quota.limit} polishes used today
                 {lastProvider ? ` · last call: ${lastProvider}` : ''}.
