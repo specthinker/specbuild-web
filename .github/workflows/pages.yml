@@ -32,6 +32,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_API_URL: https://specbuild-backend.onrender.com
+          VITE_CONTACT_EMAIL: muhammadkonecom@gmail.com
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

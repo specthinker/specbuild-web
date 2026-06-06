@@ -19,7 +19,7 @@ const CLIENT_ID_KEY = 'specbuild-client-id';
 
 export class NotConfiguredError extends Error {
   constructor() {
-    super('Backend API not configured. Set VITE_API_URL in your .env file.');
+    super('This feature is temporarily unavailable. Please try again in a moment.');
     this.name = 'NotConfiguredError';
   }
 }

@@ -392,7 +392,7 @@ export function App() {
       setCopied(true);
     } catch (err) {
       if (err instanceof api.NotConfiguredError) {
-        setPolishError('Backend not configured.');
+        setPolishError('Copy is temporarily unavailable. Please try again in a moment.');
       } else {
         setPolishError(err instanceof Error ? err.message : 'Copy failed.');
       }
