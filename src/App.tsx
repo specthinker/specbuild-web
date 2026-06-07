@@ -298,6 +298,8 @@ export function App() {
         .map((section) => section.id),
     [values],
   );
+
+  const requiredFieldsLeft = missingRequired.length + (title.trim() ? 0 : 1);
   const canGenerate = useMemo(
     () =>
       sections.every((section) => !section.required || values[section.id].trim().length > 0) &&
@@ -659,15 +661,17 @@ python3 spec_cli.py gen --format text
                 <Clipboard size={18} aria-hidden="true" />
                 {copied ? 'Copied' : `Copy ${formatLabel(format)}`}
               </button>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={polishWithAi}
-                disabled={!canGenerate || isPolishing || !apiConfigured || quotaExhausted}
-              >
-                <Wand2 size={18} aria-hidden="true" />
-                {isPolishing ? 'Polishing…' : polishedSpec ? 'Re-polish' : 'Polish with AI'}
-              </button>
+<button
+    className="secondary-button"
+    type="button"
+    onClick={polishWithAi}
+    disabled={!canGenerate || isPolishing || !apiConfigured || quotaExhausted}
+    title={!isPremium ? 'Only available for paying users' : undefined}
+  >
+    <Wand2 size={18} aria-hidden="true" />
+    {isPolishing ? 'Polishing…' : polishedSpec ? 'Re-polish' : 'Polish with AI'}
+    {!isPremium && <span className="premium-badge">Premium</span>}
+  </button>
             </div>
 
             {polishError && <p className="error-banner">{polishError}</p>}
