@@ -652,15 +652,17 @@ python3 spec_cli.py gen --format text
             </div>
 
             <div className="action-buttons">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={copySpec}
-                disabled={!canGenerate}
-              >
-                <Clipboard size={18} aria-hidden="true" />
-                {copied ? 'Copied' : `Copy ${formatLabel(format)}`}
-              </button>
+<button
+    className="primary-button"
+    type="button"
+    onClick={copySpec}
+    disabled={!canGenerate}
+    title={requiredFieldsLeft > 0 ? `${requiredFieldsLeft} more required fields to fill` : undefined}
+  >
+    <Clipboard size={18} aria-hidden="true" />
+    {copied ? 'Copied' : `Copy ${formatLabel(format)}`}
+    {requiredFieldsLeft > 0 && <span className="required-fields-badge">{requiredFieldsLeft}</span>}
+  </button>
 <button
     className="secondary-button"
     type="button"
@@ -939,6 +941,7 @@ python3 spec_cli.py gen --format text
             <a href="#cli" onClick={(event) => { event.preventDefault(); scrollToIdFromOtherView('cli', view, setView); }}>CLI</a>
             <a href="#pricing" onClick={(event) => { event.preventDefault(); scrollToIdFromOtherView('pricing', view, setView); }}>Pricing</a>
             <button type="button" className="site-footer-link-button" onClick={() => setView('contact')}>Contact</button>
+            <button type="button" className="site-footer-link-button" onClick={() => setView('startup')}>Add me on your startup</button>
           </div>
           <p>&copy; {new Date().getFullYear()} Spec Builder. Crafted for builders.</p>
         </div>
