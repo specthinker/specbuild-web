@@ -254,6 +254,23 @@ export function App() {
     const saved = localStorage.getItem('specthinker-plan');
     return saved === 'basic' || saved === 'pro' || saved === 'lifetime' ? saved : 'free';
   });
+
+  const [specGenCount, setSpecGenCount] = useState<number>(() => {
+    const saved = localStorage.getItem('spec-gen-count');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const MAX_FREE_GENERATIONS = 3;
+
+  useEffect(() => {
+    localStorage.setItem('spec-gen-count', specGenCount.toString());
+  }, [specGenCount]);
+
+  function checkSpecGenLimit() {
+    if (plan === 'free' && specGenCount >= MAX_FREE_GENERATIONS) {
+      window.location.href = '#pricing';
+    }
+  }
   const [polishedSpec, setPolishedSpec] = useState<string | null>(null);
   const [isPolishing, setIsPolishing] = useState(false);
   const [polishError, setPolishError] = useState<string | null>(null);
@@ -372,6 +389,8 @@ export function App() {
         : formatSpecClientSide(values, format);
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      setSpecGenCount(prevCount => prevCount + 1);
+      checkSpecGenLimit();
     } catch (err) {
       if (err instanceof api.NotConfiguredError) {
         setPolishError('Copy is temporarily unavailable. Please try again in a moment.');
